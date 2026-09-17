@@ -31,13 +31,18 @@ func NewURLService(repository repository.URLRepository) *URLService {
 }
 
 // CreateShortURL validates the original URL, generates a short code,
-// stores it in PostgreSQL, and returns the created URL.
+// associates it with the authenticated user, and stores it in PostgreSQL.
 func (s *URLService) CreateShortURL(
 	ctx context.Context,
 	originalURL string,
+	userID int64,
 ) (model.URL, error) {
 	if err := validateURL(originalURL); err != nil {
 		return model.URL{}, err
+	}
+
+	if userID <= 0 {
+		return model.URL{}, fmt.Errorf("invalid user ID")
 	}
 
 	for attempt := 0; attempt < maxGenerationAttempts; attempt++ {
@@ -49,6 +54,7 @@ func (s *URLService) CreateShortURL(
 		createdURL := model.URL{
 			ShortCode:   shortCode,
 			OriginalURL: originalURL,
+			UserID:      &userID,
 			IsActive:    true,
 		}
 

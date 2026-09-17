@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 
+	"goshort/auth"
 	"goshort/model"
 	"goshort/repository"
 	"goshort/service"
@@ -49,6 +50,12 @@ func (h *URLHandler) CreateURL(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	user, ok := auth.CurrentUser(r.Context())
+	if !ok {
+		http.Error(w, "Authentication required", http.StatusUnauthorized)
+		return
+	}
+
 	var request CreateURLRequest
 
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
@@ -59,6 +66,7 @@ func (h *URLHandler) CreateURL(w http.ResponseWriter, r *http.Request) {
 	createdURL, err := h.service.CreateShortURL(
 		r.Context(),
 		request.URL,
+		user.UserID,
 	)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -81,10 +89,8 @@ func (h *URLHandler) GetURL(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	idText := strings.TrimPrefix(r.URL.Path, "/api/v1/urls/")
-
-	id, err := strconv.ParseInt(idText, 10, 64)
-	if err != nil || id <= 0 {
+	id, err := parseURLID(r.URL.Path)
+	if err != nil {
 		http.Error(w, "Invalid URL ID", http.StatusBadRequest)
 		return
 	}
@@ -100,6 +106,10 @@ func (h *URLHandler) GetURL(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if !requireURLOwnership(w, r, storedURL) {
+		return
+	}
+
 	writeJSON(w, http.StatusOK, storedURL)
 }
 
@@ -110,18 +120,9 @@ func (h *URLHandler) UpdateURL(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	idText := strings.TrimPrefix(r.URL.Path, "/api/v1/urls/")
-
-	id, err := strconv.ParseInt(idText, 10, 64)
-	if err != nil || id <= 0 {
+	id, err := parseURLID(r.URL.Path)
+	if err != nil {
 		http.Error(w, "Invalid URL ID", http.StatusBadRequest)
-		return
-	}
-
-	var request UpdateURLRequest
-
-	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
-		http.Error(w, "Invalid JSON", http.StatusBadRequest)
 		return
 	}
 
@@ -136,6 +137,17 @@ func (h *URLHandler) UpdateURL(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if !requireURLOwnership(w, r, existingURL) {
+		return
+	}
+
+	var request UpdateURLRequest
+
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		http.Error(w, "Invalid JSON", http.StatusBadRequest)
+		return
+	}
+
 	if request.URL != "" {
 		existingURL.OriginalURL = request.URL
 	}
@@ -147,7 +159,11 @@ func (h *URLHandler) UpdateURL(w http.ResponseWriter, r *http.Request) {
 	// Expiration parsing will be added when the API contract
 	// explicitly defines the accepted timestamp format.
 	if request.ExpiresAt != "" {
-		http.Error(w, "expires_at format is not supported yet", http.StatusBadRequest)
+		http.Error(
+			w,
+			"expires_at format is not supported yet",
+			http.StatusBadRequest,
+		)
 		return
 	}
 
@@ -170,16 +186,28 @@ func (h *URLHandler) DeleteURL(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	idText := strings.TrimPrefix(r.URL.Path, "/api/v1/urls/")
-
-	id, err := strconv.ParseInt(idText, 10, 64)
-	if err != nil || id <= 0 {
+	id, err := parseURLID(r.URL.Path)
+	if err != nil {
 		http.Error(w, "Invalid URL ID", http.StatusBadRequest)
 		return
 	}
 
-	err = h.service.DeleteURL(r.Context(), id)
+	storedURL, err := h.service.GetURLByID(r.Context(), id)
 	if err != nil {
+		if repository.IsNotFound(err) {
+			http.NotFound(w, r)
+			return
+		}
+
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+
+	if !requireURLOwnership(w, r, storedURL) {
+		return
+	}
+
+	if err := h.service.DeleteURL(r.Context(), id); err != nil {
 		if repository.IsNotFound(err) {
 			http.NotFound(w, r)
 			return
@@ -228,6 +256,38 @@ func (h *URLHandler) Redirect(w http.ResponseWriter, r *http.Request) {
 	)
 }
 
+// requireURLOwnership verifies that the authenticated user owns the URL.
+func requireURLOwnership(
+	w http.ResponseWriter,
+	r *http.Request,
+	storedURL model.URL,
+) bool {
+	user, ok := auth.CurrentUser(r.Context())
+	if !ok {
+		http.Error(w, "Authentication required", http.StatusUnauthorized)
+		return false
+	}
+
+	if storedURL.UserID == nil || *storedURL.UserID != user.UserID {
+		http.Error(w, "Forbidden", http.StatusForbidden)
+		return false
+	}
+
+	return true
+}
+
+// parseURLID extracts the numeric URL ID from /api/v1/urls/:id.
+func parseURLID(path string) (int64, error) {
+	idText := strings.TrimPrefix(path, "/api/v1/urls/")
+
+	id, err := strconv.ParseInt(idText, 10, 64)
+	if err != nil || id <= 0 {
+		return 0, strconv.ErrSyntax
+	}
+
+	return id, nil
+}
+
 // writeJSON writes a JSON response with the requested HTTP status.
 func writeJSON(
 	w http.ResponseWriter,
@@ -239,6 +299,3 @@ func writeJSON(
 
 	_ = json.NewEncoder(w).Encode(data)
 }
-
-// Keep model imported explicitly as part of the handler's API layer.
-var _ model.URL
