@@ -23,6 +23,10 @@ const (
 	refreshTokenBytes    = 32
 )
 
+// ErrEmailAlreadyExists is returned when a registration
+// attempt uses an email that already exists.
+var ErrEmailAlreadyExists = errors.New("email already registered")
+
 // AuthService contains authentication and token logic.
 type AuthService struct {
 	users         repository.UserRepository
@@ -59,13 +63,8 @@ func (s *AuthService) Register(
 		return model.User{}, errors.New("email is required")
 	}
 
-	if password == "" {
-		return model.User{}, errors.New("password is required")
-	}
-
-	// bcrypt accepts passwords up to 72 bytes.
-	if len(password) > 72 {
-		return model.User{}, errors.New("password is too long")
+	if err := validatePassword(password); err != nil {
+		return model.User{}, err
 	}
 
 	passwordHash, err := bcrypt.GenerateFromPassword(
@@ -73,7 +72,10 @@ func (s *AuthService) Register(
 		bcrypt.DefaultCost,
 	)
 	if err != nil {
-		return model.User{}, fmt.Errorf("hash password: %w", err)
+		return model.User{}, fmt.Errorf(
+			"hash password: %w",
+			err,
+		)
 	}
 
 	user := model.User{
@@ -82,7 +84,19 @@ func (s *AuthService) Register(
 		Role:         "user",
 	}
 
-	return s.users.Create(ctx, user)
+	createdUser, err := s.users.Create(ctx, user)
+	if err != nil {
+		if repository.IsUniqueViolation(err) {
+			return model.User{}, ErrEmailAlreadyExists
+		}
+
+		return model.User{}, fmt.Errorf(
+			"create user: %w",
+			err,
+		)
+	}
+
+	return createdUser, nil
 }
 
 // Login verifies credentials and creates access + refresh tokens.
@@ -107,10 +121,16 @@ func (s *AuthService) Login(
 
 	accessToken, err := s.generateAccessToken(user)
 	if err != nil {
-		return "", "", model.User{}, fmt.Errorf("generate access token: %w", err)
+		return "", "", model.User{}, fmt.Errorf(
+			"generate access token: %w",
+			err,
+		)
 	}
 
-	refreshToken, err := s.createRefreshToken(ctx, user.ID)
+	refreshToken, err := s.createRefreshToken(
+		ctx,
+		user.ID,
+	)
 	if err != nil {
 		return "", "", model.User{}, err
 	}
@@ -118,15 +138,16 @@ func (s *AuthService) Login(
 	return accessToken, refreshToken, user, nil
 }
 
-// Refresh validates a refresh token and creates a new access token.
+// Refresh validates the supplied refresh token, revokes it,
+// and atomically creates a replacement refresh token.
 func (s *AuthService) Refresh(
 	ctx context.Context,
 	rawRefreshToken string,
-) (string, error) {
+) (string, string, error) {
 	rawRefreshToken = strings.TrimSpace(rawRefreshToken)
 
 	if rawRefreshToken == "" {
-		return "", errors.New("invalid refresh token")
+		return "", "", errors.New("invalid refresh token")
 	}
 
 	tokenHash := hashToken(rawRefreshToken)
@@ -136,15 +157,42 @@ func (s *AuthService) Refresh(
 		tokenHash,
 	)
 	if err != nil {
-		return "", errors.New("invalid refresh token")
+		return "", "", errors.New("invalid refresh token")
 	}
 
-	user, err := s.users.FindByID(ctx, storedToken.UserID)
+	user, err := s.users.FindByID(
+		ctx,
+		storedToken.UserID,
+	)
 	if err != nil {
-		return "", errors.New("invalid refresh token")
+		return "", "", errors.New("invalid refresh token")
 	}
 
-	return s.generateAccessToken(user)
+	accessToken, err := s.generateAccessToken(user)
+	if err != nil {
+		return "", "", fmt.Errorf(
+			"generate access token: %w",
+			err,
+		)
+	}
+
+	newRawRefreshToken, newStoredToken, err := s.generateRefreshToken(
+		user.ID,
+	)
+	if err != nil {
+		return "", "", err
+	}
+
+	_, err = s.refreshTokens.Rotate(
+		ctx,
+		storedToken.ID,
+		newStoredToken,
+	)
+	if err != nil {
+		return "", "", errors.New("invalid refresh token")
+	}
+
+	return accessToken, newRawRefreshToken, nil
 }
 
 // Logout revokes the supplied refresh token.
@@ -168,11 +216,16 @@ func (s *AuthService) Logout(
 		return errors.New("invalid refresh token")
 	}
 
-	return s.refreshTokens.Revoke(ctx, storedToken.ID)
+	return s.refreshTokens.Revoke(
+		ctx,
+		storedToken.ID,
+	)
 }
 
 // generateAccessToken creates a short-lived signed JWT.
-func (s *AuthService) generateAccessToken(user model.User) (string, error) {
+func (s *AuthService) generateAccessToken(
+	user model.User,
+) (string, error) {
 	now := time.Now()
 
 	claims := jwt.MapClaims{
@@ -194,16 +247,42 @@ func (s *AuthService) generateAccessToken(user model.User) (string, error) {
 	return token.SignedString(s.jwtSecret)
 }
 
-// createRefreshToken generates a cryptographically random opaque token
-// and stores only its SHA-256 hash.
+// createRefreshToken generates a cryptographically random
+// opaque token and stores only its SHA-256 hash.
 func (s *AuthService) createRefreshToken(
 	ctx context.Context,
 	userID int64,
 ) (string, error) {
+	rawToken, storedToken, err := s.generateRefreshToken(userID)
+	if err != nil {
+		return "", err
+	}
+
+	if _, err := s.refreshTokens.Create(
+		ctx,
+		storedToken,
+	); err != nil {
+		return "", fmt.Errorf(
+			"store refresh token: %w",
+			err,
+		)
+	}
+
+	return rawToken, nil
+}
+
+// generateRefreshToken creates a raw refresh token and
+// its database representation without storing it.
+func (s *AuthService) generateRefreshToken(
+	userID int64,
+) (string, model.RefreshToken, error) {
 	randomBytes := make([]byte, refreshTokenBytes)
 
 	if _, err := rand.Read(randomBytes); err != nil {
-		return "", fmt.Errorf("generate refresh token: %w", err)
+		return "", model.RefreshToken{}, fmt.Errorf(
+			"generate refresh token: %w",
+			err,
+		)
 	}
 
 	rawToken := hex.EncodeToString(randomBytes)
@@ -214,15 +293,13 @@ func (s *AuthService) createRefreshToken(
 		ExpiresAt: time.Now().Add(refreshTokenLifetime),
 	}
 
-	if _, err := s.refreshTokens.Create(ctx, storedToken); err != nil {
-		return "", fmt.Errorf("store refresh token: %w", err)
-	}
-
-	return rawToken, nil
+	return rawToken, storedToken, nil
 }
 
-// hashToken creates a deterministic SHA-256 hash for database lookup.
+// hashToken creates a deterministic SHA-256 hash for
+// database lookup.
 func hashToken(token string) string {
 	hash := sha256.Sum256([]byte(token))
+
 	return hex.EncodeToString(hash[:])
 }

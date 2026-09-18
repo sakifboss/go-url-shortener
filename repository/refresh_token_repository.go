@@ -7,21 +7,21 @@ import (
 	"goshort/model"
 )
 
-// RefreshTokenRepository defines persistent refresh-token operations.
 type RefreshTokenRepository interface {
 	Create(ctx context.Context, token model.RefreshToken) (model.RefreshToken, error)
 	FindActiveByHash(ctx context.Context, tokenHash string) (model.RefreshToken, error)
 	Revoke(ctx context.Context, id int64) error
+	Rotate(
+		ctx context.Context,
+		oldTokenID int64,
+		newToken model.RefreshToken,
+	) (model.RefreshToken, error)
 }
 
-// PostgresRefreshTokenRepository implements refresh-token storage
-// using PostgreSQL.
 type PostgresRefreshTokenRepository struct {
 	db *sql.DB
 }
 
-// NewPostgresRefreshTokenRepository creates a PostgreSQL-backed
-// refresh-token repository.
 func NewPostgresRefreshTokenRepository(
 	db *sql.DB,
 ) *PostgresRefreshTokenRepository {
@@ -30,7 +30,6 @@ func NewPostgresRefreshTokenRepository(
 	}
 }
 
-// Create stores only the hashed refresh token.
 func (r *PostgresRefreshTokenRepository) Create(
 	ctx context.Context,
 	token model.RefreshToken,
@@ -63,8 +62,6 @@ func (r *PostgresRefreshTokenRepository) Create(
 	return token, nil
 }
 
-// FindActiveByHash retrieves a refresh token that has not been
-// revoked and has not expired.
 func (r *PostgresRefreshTokenRepository) FindActiveByHash(
 	ctx context.Context,
 	tokenHash string,
@@ -105,7 +102,6 @@ func (r *PostgresRefreshTokenRepository) FindActiveByHash(
 	return token, nil
 }
 
-// Revoke invalidates a refresh token.
 func (r *PostgresRefreshTokenRepository) Revoke(
 	ctx context.Context,
 	id int64,
@@ -136,4 +132,77 @@ func (r *PostgresRefreshTokenRepository) Revoke(
 	}
 
 	return nil
+}
+
+// Rotate atomically revokes the old refresh token and creates
+// a new refresh token in the same database transaction.
+func (r *PostgresRefreshTokenRepository) Rotate(
+	ctx context.Context,
+	oldTokenID int64,
+	newToken model.RefreshToken,
+) (model.RefreshToken, error) {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return model.RefreshToken{}, err
+	}
+
+	defer func() {
+		_ = tx.Rollback()
+	}()
+
+	const revokeQuery = `
+		UPDATE refresh_tokens
+		SET revoked_at = NOW()
+		WHERE id = $1
+		  AND revoked_at IS NULL
+	`
+
+	result, err := tx.ExecContext(
+		ctx,
+		revokeQuery,
+		oldTokenID,
+	)
+	if err != nil {
+		return model.RefreshToken{}, err
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return model.RefreshToken{}, err
+	}
+
+	if rowsAffected == 0 {
+		return model.RefreshToken{}, sql.ErrNoRows
+	}
+
+	const createQuery = `
+		INSERT INTO refresh_tokens (
+			user_id,
+			token_hash,
+			expires_at
+		)
+		VALUES ($1, $2, $3)
+		RETURNING id, created_at
+	`
+
+	err = tx.QueryRowContext(
+		ctx,
+		createQuery,
+		newToken.UserID,
+		newToken.TokenHash,
+		newToken.ExpiresAt,
+	).Scan(
+		&newToken.ID,
+		&newToken.CreatedAt,
+	)
+
+	if err != nil {
+		return model.RefreshToken{}, err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return model.RefreshToken{}, err
+	}
+
+	return newToken, nil
 }

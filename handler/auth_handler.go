@@ -2,19 +2,20 @@ package handler
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strings"
 
 	"goshort/auth"
 )
 
-// AuthHandler handles authentication-related HTTP requests.
 type AuthHandler struct {
 	authService *auth.AuthService
 }
 
-// NewAuthHandler creates an authentication HTTP handler.
-func NewAuthHandler(authService *auth.AuthService) *AuthHandler {
+func NewAuthHandler(
+	authService *auth.AuthService,
+) *AuthHandler {
 	return &AuthHandler{
 		authService: authService,
 	}
@@ -44,17 +45,27 @@ type authResponse struct {
 	TokenType    string `json:"token_type"`
 }
 
-// Register handles POST /api/v1/auth/register.
-func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
+func (h *AuthHandler) Register(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
 	if r.Method != http.MethodPost {
-		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
+		http.Error(
+			w,
+			"Method Not Allowed",
+			http.StatusMethodNotAllowed,
+		)
 		return
 	}
 
 	var request registerRequest
 
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
-		http.Error(w, "Invalid JSON", http.StatusBadRequest)
+		http.Error(
+			w,
+			"Invalid JSON",
+			http.StatusBadRequest,
+		)
 		return
 	}
 
@@ -64,28 +75,55 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 		request.Password,
 	)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		if errors.Is(err, auth.ErrEmailAlreadyExists) {
+			http.Error(
+				w,
+				"Email already registered",
+				http.StatusConflict,
+			)
+			return
+		}
+
+		http.Error(
+			w,
+			err.Error(),
+			http.StatusBadRequest,
+		)
 		return
 	}
 
-	writeJSON(w, http.StatusCreated, map[string]interface{}{
-		"id":    user.ID,
-		"email": user.Email,
-		"role":  user.Role,
-	})
+	writeJSON(
+		w,
+		http.StatusCreated,
+		map[string]interface{}{
+			"id":    user.ID,
+			"email": user.Email,
+			"role":  user.Role,
+		},
+	)
 }
 
-// Login handles POST /api/v1/auth/login.
-func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
+func (h *AuthHandler) Login(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
 	if r.Method != http.MethodPost {
-		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
+		http.Error(
+			w,
+			"Method Not Allowed",
+			http.StatusMethodNotAllowed,
+		)
 		return
 	}
 
 	var request loginRequest
 
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
-		http.Error(w, "Invalid JSON", http.StatusBadRequest)
+		http.Error(
+			w,
+			"Invalid JSON",
+			http.StatusBadRequest,
+		)
 		return
 	}
 
@@ -95,71 +133,120 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		request.Password,
 	)
 	if err != nil {
-		http.Error(w, "Invalid credentials", http.StatusUnauthorized)
+		http.Error(
+			w,
+			"Invalid credentials",
+			http.StatusUnauthorized,
+		)
 		return
 	}
 
-	writeJSON(w, http.StatusOK, authResponse{
-		AccessToken:  accessToken,
-		RefreshToken: refreshToken,
-		TokenType:    "Bearer",
-	})
+	writeJSON(
+		w,
+		http.StatusOK,
+		authResponse{
+			AccessToken:  accessToken,
+			RefreshToken: refreshToken,
+			TokenType:    "Bearer",
+		},
+	)
 }
 
-// Refresh handles POST /api/v1/auth/refresh.
-func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
+func (h *AuthHandler) Refresh(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
 	if r.Method != http.MethodPost {
-		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
+		http.Error(
+			w,
+			"Method Not Allowed",
+			http.StatusMethodNotAllowed,
+		)
 		return
 	}
 
 	var request refreshRequest
 
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
-		http.Error(w, "Invalid JSON", http.StatusBadRequest)
+		http.Error(
+			w,
+			"Invalid JSON",
+			http.StatusBadRequest,
+		)
 		return
 	}
 
-	request.RefreshToken = strings.TrimSpace(request.RefreshToken)
+	request.RefreshToken = strings.TrimSpace(
+		request.RefreshToken,
+	)
 
 	if request.RefreshToken == "" {
-		http.Error(w, "refresh_token is required", http.StatusBadRequest)
+		http.Error(
+			w,
+			"refresh_token is required",
+			http.StatusBadRequest,
+		)
 		return
 	}
 
-	accessToken, err := h.authService.Refresh(
+	accessToken, refreshToken, err := h.authService.Refresh(
 		r.Context(),
 		request.RefreshToken,
 	)
 	if err != nil {
-		http.Error(w, "Invalid refresh token", http.StatusUnauthorized)
+		http.Error(
+			w,
+			"Invalid refresh token",
+			http.StatusUnauthorized,
+		)
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"access_token": accessToken,
-		"token_type":   "Bearer",
-	})
+	writeJSON(
+		w,
+		http.StatusOK,
+		authResponse{
+			AccessToken:  accessToken,
+			RefreshToken: refreshToken,
+			TokenType:    "Bearer",
+		},
+	)
 }
 
-// Logout handles POST /api/v1/auth/logout.
-func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
+func (h *AuthHandler) Logout(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
 	if r.Method != http.MethodPost {
-		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
+		http.Error(
+			w,
+			"Method Not Allowed",
+			http.StatusMethodNotAllowed,
+		)
 		return
 	}
 
 	var request logoutRequest
 
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
-		http.Error(w, "Invalid JSON", http.StatusBadRequest)
+		http.Error(
+			w,
+			"Invalid JSON",
+			http.StatusBadRequest,
+		)
 		return
 	}
 
-	request.RefreshToken = strings.TrimSpace(request.RefreshToken)
+	request.RefreshToken = strings.TrimSpace(
+		request.RefreshToken,
+	)
 
 	if request.RefreshToken == "" {
-		http.Error(w, "refresh_token is required", http.StatusBadRequest)
+		http.Error(
+			w,
+			"refresh_token is required",
+			http.StatusBadRequest,
+		)
 		return
 	}
 
@@ -167,7 +254,11 @@ func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 		r.Context(),
 		request.RefreshToken,
 	); err != nil {
-		http.Error(w, "Invalid refresh token", http.StatusUnauthorized)
+		http.Error(
+			w,
+			"Invalid refresh token",
+			http.StatusUnauthorized,
+		)
 		return
 	}
 

@@ -5,29 +5,25 @@ import (
 	"database/sql"
 	"errors"
 
+	"github.com/jackc/pgx/v5/pgconn"
+
 	"goshort/model"
 )
 
-// UserRepository defines persistent user operations.
 type UserRepository interface {
 	Create(ctx context.Context, user model.User) (model.User, error)
 	FindByEmail(ctx context.Context, email string) (model.User, error)
 	FindByID(ctx context.Context, id int64) (model.User, error)
 }
 
-// PostgresUserRepository implements UserRepository using PostgreSQL.
 type PostgresUserRepository struct {
 	db *sql.DB
 }
 
-// NewPostgresUserRepository creates a PostgreSQL-backed user repository.
 func NewPostgresUserRepository(db *sql.DB) *PostgresUserRepository {
-	return &PostgresUserRepository{
-		db: db,
-	}
+	return &PostgresUserRepository{db: db}
 }
 
-// Create stores a new user and returns its generated ID and timestamp.
 func (r *PostgresUserRepository) Create(
 	ctx context.Context,
 	user model.User,
@@ -60,7 +56,6 @@ func (r *PostgresUserRepository) Create(
 	return user, nil
 }
 
-// FindByEmail retrieves a user by email.
 func (r *PostgresUserRepository) FindByEmail(
 	ctx context.Context,
 	email string,
@@ -97,7 +92,6 @@ func (r *PostgresUserRepository) FindByEmail(
 	return user, nil
 }
 
-// FindByID retrieves a user by database ID.
 func (r *PostgresUserRepository) FindByID(
 	ctx context.Context,
 	id int64,
@@ -134,7 +128,21 @@ func (r *PostgresUserRepository) FindByID(
 	return user, nil
 }
 
-// IsUserNotFound reports whether a user lookup returned no record.
+// IsUserNotFound reports whether the repository error means
+// that the requested user does not exist.
 func IsUserNotFound(err error) bool {
 	return errors.Is(err, sql.ErrNoRows)
+}
+
+// IsUniqueViolation reports whether PostgreSQL rejected an
+// operation because of a UNIQUE constraint.
+func IsUniqueViolation(err error) bool {
+	var pgError *pgconn.PgError
+
+	if !errors.As(err, &pgError) {
+		return false
+	}
+
+	// PostgreSQL SQLSTATE 23505 = unique_violation.
+	return pgError.Code == "23505"
 }
