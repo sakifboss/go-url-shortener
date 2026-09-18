@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"encoding/json"
 	"errors"
 	"net/http"
 	"strings"
@@ -60,10 +59,10 @@ func (h *AuthHandler) Register(
 
 	var request registerRequest
 
-	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+	if err := decodeJSONBody(w, r, &request); err != nil {
 		http.Error(
 			w,
-			"Invalid JSON",
+			err.Error(),
 			http.StatusBadRequest,
 		)
 		return
@@ -118,10 +117,10 @@ func (h *AuthHandler) Login(
 
 	var request loginRequest
 
-	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+	if err := decodeJSONBody(w, r, &request); err != nil {
 		http.Error(
 			w,
-			"Invalid JSON",
+			err.Error(),
 			http.StatusBadRequest,
 		)
 		return
@@ -167,10 +166,10 @@ func (h *AuthHandler) Refresh(
 
 	var request refreshRequest
 
-	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+	if err := decodeJSONBody(w, r, &request); err != nil {
 		http.Error(
 			w,
-			"Invalid JSON",
+			err.Error(),
 			http.StatusBadRequest,
 		)
 		return
@@ -228,10 +227,10 @@ func (h *AuthHandler) Logout(
 
 	var request logoutRequest
 
-	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+	if err := decodeJSONBody(w, r, &request); err != nil {
 		http.Error(
 			w,
-			"Invalid JSON",
+			err.Error(),
 			http.StatusBadRequest,
 		)
 		return

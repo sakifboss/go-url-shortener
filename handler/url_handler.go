@@ -44,22 +44,37 @@ func NewURLHandler(service *service.URLService) *URLHandler {
 }
 
 // CreateURL handles POST /api/v1/urls.
-func (h *URLHandler) CreateURL(w http.ResponseWriter, r *http.Request) {
+func (h *URLHandler) CreateURL(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
 	if r.Method != http.MethodPost {
-		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
+		http.Error(
+			w,
+			"Method Not Allowed",
+			http.StatusMethodNotAllowed,
+		)
 		return
 	}
 
 	user, ok := auth.CurrentUser(r.Context())
 	if !ok {
-		http.Error(w, "Authentication required", http.StatusUnauthorized)
+		http.Error(
+			w,
+			"Authentication required",
+			http.StatusUnauthorized,
+		)
 		return
 	}
 
 	var request CreateURLRequest
 
-	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
-		http.Error(w, "Invalid JSON", http.StatusBadRequest)
+	if err := decodeJSONBody(w, r, &request); err != nil {
+		http.Error(
+			w,
+			err.Error(),
+			http.StatusBadRequest,
+		)
 		return
 	}
 
@@ -69,7 +84,11 @@ func (h *URLHandler) CreateURL(w http.ResponseWriter, r *http.Request) {
 		user.UserID,
 	)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		http.Error(
+			w,
+			err.Error(),
+			http.StatusBadRequest,
+		)
 		return
 	}
 
@@ -79,72 +98,132 @@ func (h *URLHandler) CreateURL(w http.ResponseWriter, r *http.Request) {
 		ShortURL:  "http://localhost:8080/" + createdURL.ShortCode,
 	}
 
-	writeJSON(w, http.StatusCreated, response)
+	writeJSON(
+		w,
+		http.StatusCreated,
+		response,
+	)
 }
 
 // GetURL handles GET /api/v1/urls/:id.
-func (h *URLHandler) GetURL(w http.ResponseWriter, r *http.Request) {
+func (h *URLHandler) GetURL(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
 	if r.Method != http.MethodGet {
-		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
+		http.Error(
+			w,
+			"Method Not Allowed",
+			http.StatusMethodNotAllowed,
+		)
 		return
 	}
 
 	id, err := parseURLID(r.URL.Path)
 	if err != nil {
-		http.Error(w, "Invalid URL ID", http.StatusBadRequest)
+		http.Error(
+			w,
+			"Invalid URL ID",
+			http.StatusBadRequest,
+		)
 		return
 	}
 
-	storedURL, err := h.service.GetURLByID(r.Context(), id)
+	storedURL, err := h.service.GetURLByID(
+		r.Context(),
+		id,
+	)
 	if err != nil {
 		if repository.IsNotFound(err) {
 			http.NotFound(w, r)
 			return
 		}
 
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		http.Error(
+			w,
+			"Internal Server Error",
+			http.StatusInternalServerError,
+		)
 		return
 	}
 
-	if !requireURLOwnership(w, r, storedURL) {
+	if !requireURLOwnership(
+		w,
+		r,
+		storedURL,
+	) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, storedURL)
+	writeJSON(
+		w,
+		http.StatusOK,
+		storedURL,
+	)
 }
 
 // UpdateURL handles PATCH /api/v1/urls/:id.
-func (h *URLHandler) UpdateURL(w http.ResponseWriter, r *http.Request) {
+func (h *URLHandler) UpdateURL(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
 	if r.Method != http.MethodPatch {
-		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
+		http.Error(
+			w,
+			"Method Not Allowed",
+			http.StatusMethodNotAllowed,
+		)
 		return
 	}
 
 	id, err := parseURLID(r.URL.Path)
 	if err != nil {
-		http.Error(w, "Invalid URL ID", http.StatusBadRequest)
+		http.Error(
+			w,
+			"Invalid URL ID",
+			http.StatusBadRequest,
+		)
 		return
 	}
 
-	existingURL, err := h.service.GetURLByID(r.Context(), id)
+	existingURL, err := h.service.GetURLByID(
+		r.Context(),
+		id,
+	)
 	if err != nil {
 		if repository.IsNotFound(err) {
 			http.NotFound(w, r)
 			return
 		}
 
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		http.Error(
+			w,
+			"Internal Server Error",
+			http.StatusInternalServerError,
+		)
 		return
 	}
 
-	if !requireURLOwnership(w, r, existingURL) {
+	if !requireURLOwnership(
+		w,
+		r,
+		existingURL,
+	) {
 		return
 	}
 
 	var request UpdateURLRequest
 
-	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
-		http.Error(w, "Invalid JSON", http.StatusBadRequest)
+	if err := decodeJSONBody(
+		w,
+		r,
+		&request,
+	); err != nil {
+		http.Error(
+			w,
+			err.Error(),
+			http.StatusBadRequest,
+		)
 		return
 	}
 
@@ -172,48 +251,85 @@ func (h *URLHandler) UpdateURL(w http.ResponseWriter, r *http.Request) {
 		existingURL,
 	)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		http.Error(
+			w,
+			err.Error(),
+			http.StatusBadRequest,
+		)
 		return
 	}
 
-	writeJSON(w, http.StatusOK, updatedURL)
+	writeJSON(
+		w,
+		http.StatusOK,
+		updatedURL,
+	)
 }
 
 // DeleteURL handles DELETE /api/v1/urls/:id.
-func (h *URLHandler) DeleteURL(w http.ResponseWriter, r *http.Request) {
+func (h *URLHandler) DeleteURL(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
 	if r.Method != http.MethodDelete {
-		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
+		http.Error(
+			w,
+			"Method Not Allowed",
+			http.StatusMethodNotAllowed,
+		)
 		return
 	}
 
 	id, err := parseURLID(r.URL.Path)
 	if err != nil {
-		http.Error(w, "Invalid URL ID", http.StatusBadRequest)
+		http.Error(
+			w,
+			"Invalid URL ID",
+			http.StatusBadRequest,
+		)
 		return
 	}
 
-	storedURL, err := h.service.GetURLByID(r.Context(), id)
+	storedURL, err := h.service.GetURLByID(
+		r.Context(),
+		id,
+	)
 	if err != nil {
 		if repository.IsNotFound(err) {
 			http.NotFound(w, r)
 			return
 		}
 
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		http.Error(
+			w,
+			"Internal Server Error",
+			http.StatusInternalServerError,
+		)
 		return
 	}
 
-	if !requireURLOwnership(w, r, storedURL) {
+	if !requireURLOwnership(
+		w,
+		r,
+		storedURL,
+	) {
 		return
 	}
 
-	if err := h.service.DeleteURL(r.Context(), id); err != nil {
+	if err := h.service.DeleteURL(
+		r.Context(),
+		id,
+	); err != nil {
 		if repository.IsNotFound(err) {
 			http.NotFound(w, r)
 			return
 		}
 
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		http.Error(
+			w,
+			"Internal Server Error",
+			http.StatusInternalServerError,
+		)
 		return
 	}
 
@@ -221,13 +337,23 @@ func (h *URLHandler) DeleteURL(w http.ResponseWriter, r *http.Request) {
 }
 
 // Redirect handles GET /:shortCode.
-func (h *URLHandler) Redirect(w http.ResponseWriter, r *http.Request) {
+func (h *URLHandler) Redirect(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
 	if r.Method != http.MethodGet {
-		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
+		http.Error(
+			w,
+			"Method Not Allowed",
+			http.StatusMethodNotAllowed,
+		)
 		return
 	}
 
-	shortCode := strings.TrimPrefix(r.URL.Path, "/")
+	shortCode := strings.TrimPrefix(
+		r.URL.Path,
+		"/",
+	)
 
 	if shortCode == "" {
 		http.NotFound(w, r)
@@ -244,7 +370,11 @@ func (h *URLHandler) Redirect(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		http.Error(
+			w,
+			"Internal Server Error",
+			http.StatusInternalServerError,
+		)
 		return
 	}
 
@@ -264,12 +394,21 @@ func requireURLOwnership(
 ) bool {
 	user, ok := auth.CurrentUser(r.Context())
 	if !ok {
-		http.Error(w, "Authentication required", http.StatusUnauthorized)
+		http.Error(
+			w,
+			"Authentication required",
+			http.StatusUnauthorized,
+		)
 		return false
 	}
 
-	if storedURL.UserID == nil || *storedURL.UserID != user.UserID {
-		http.Error(w, "Forbidden", http.StatusForbidden)
+	if storedURL.UserID == nil ||
+		*storedURL.UserID != user.UserID {
+		http.Error(
+			w,
+			"Forbidden",
+			http.StatusForbidden,
+		)
 		return false
 	}
 
@@ -278,9 +417,16 @@ func requireURLOwnership(
 
 // parseURLID extracts the numeric URL ID from /api/v1/urls/:id.
 func parseURLID(path string) (int64, error) {
-	idText := strings.TrimPrefix(path, "/api/v1/urls/")
+	idText := strings.TrimPrefix(
+		path,
+		"/api/v1/urls/",
+	)
 
-	id, err := strconv.ParseInt(idText, 10, 64)
+	id, err := strconv.ParseInt(
+		idText,
+		10,
+		64,
+	)
 	if err != nil || id <= 0 {
 		return 0, strconv.ErrSyntax
 	}
@@ -294,7 +440,11 @@ func writeJSON(
 	status int,
 	data interface{},
 ) {
-	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set(
+		"Content-Type",
+		"application/json",
+	)
+
 	w.WriteHeader(status)
 
 	_ = json.NewEncoder(w).Encode(data)
