@@ -5,15 +5,21 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	"goshort/auth"
 	"goshort/database"
 	"goshort/handler"
 	"goshort/repository"
+	"goshort/security"
 	"goshort/service"
 )
 
 func main() {
+	// ------------------------------------------------------------
+	// Database
+	// ------------------------------------------------------------
+
 	// Create the PostgreSQL connection pool.
 	db, err := database.NewPostgres()
 	if err != nil {
@@ -21,6 +27,10 @@ func main() {
 		return
 	}
 	defer db.Close()
+
+	// ------------------------------------------------------------
+	// Configuration
+	// ------------------------------------------------------------
 
 	// JWT secret is required to sign and validate access tokens.
 	jwtSecret := strings.TrimSpace(os.Getenv("GOSHORT_JWT_SECRET"))
@@ -72,13 +82,38 @@ func main() {
 	}
 
 	// ------------------------------------------------------------
+	// Rate limiters
+	// ------------------------------------------------------------
+
+	// Global application rate limiter.
+	// Allows up to 60 requests per client IP per minute.
+	rateLimiter := security.NewRateLimiter(
+		60,
+		time.Minute,
+	)
+
+	// Login-specific rate limiter.
+	// Allows up to 10 login requests per client IP per minute.
+	// This adds protection against brute-force login attempts.
+	loginRateLimiter := security.NewRateLimiter(
+		10,
+		time.Minute,
+	)
+
+	// ------------------------------------------------------------
 	// HTTP routes
 	// ------------------------------------------------------------
 
 	mux := http.NewServeMux()
 
-	// Public health/development endpoints.
+	// ------------------------------------------------------------
+	// Public health/development endpoints
+	// ------------------------------------------------------------
+
+	// GET /health
 	mux.HandleFunc("/health", healthHandler)
+
+	// GET /hello
 	mux.HandleFunc("/hello", helloHandler)
 
 	// ------------------------------------------------------------
@@ -92,9 +127,13 @@ func main() {
 	)
 
 	// POST /api/v1/auth/login
-	mux.HandleFunc(
+	//
+	// Login has its own stricter rate limiter.
+	mux.Handle(
 		"/api/v1/auth/login",
-		authHandler.Login,
+		loginRateLimiter.Middleware(
+			http.HandlerFunc(authHandler.Login),
+		),
 	)
 
 	// POST /api/v1/auth/refresh
@@ -114,7 +153,8 @@ func main() {
 	// ------------------------------------------------------------
 
 	// POST /api/v1/urls
-	// User must provide a valid JWT access token.
+	//
+	// Requires a valid JWT access token.
 	mux.Handle(
 		"/api/v1/urls",
 		authMiddleware.RequireAuth(
@@ -126,8 +166,8 @@ func main() {
 	// PATCH  /api/v1/urls/:id
 	// DELETE /api/v1/urls/:id
 	//
-	// All URL management operations require authentication.
-	// The handler additionally checks URL ownership.
+	// Requires authentication.
+	// The handlers additionally verify URL ownership.
 	mux.Handle(
 		"/api/v1/urls/",
 		authMiddleware.RequireAuth(
@@ -163,12 +203,45 @@ func main() {
 	mux.HandleFunc("/", urlHandler.Redirect)
 
 	// ------------------------------------------------------------
+	// Middleware chain
+	// ------------------------------------------------------------
+
+	// Request flow:
+	//
+	// Client
+	//   ↓
+	// Security middleware
+	//   ↓
+	// Global rate limiter
+	//   ↓
+	// HTTP router
+	//   ↓
+	// Authentication middleware (protected routes only)
+	//   ↓
+	// Handler
+	//   ↓
+	// Service
+	//   ↓
+	// Repository
+	//   ↓
+	// PostgreSQL
+	//
+	// Security middleware provides request-size limits and
+	// security-related HTTP response headers.
+	//
+	// Global rate limiter limits excessive requests from a
+	// client IP.
+	handlerChain := security.Middleware(
+		rateLimiter.Middleware(mux),
+	)
+
+	// ------------------------------------------------------------
 	// HTTP server
 	// ------------------------------------------------------------
 
 	server := &http.Server{
 		Addr:    ":8080",
-		Handler: mux,
+		Handler: handlerChain,
 	}
 
 	fmt.Println("GoShort server starting on http://localhost:8080")
@@ -178,6 +251,10 @@ func main() {
 		fmt.Println("Server error:", err)
 	}
 }
+
+// ------------------------------------------------------------
+// Health check
+// ------------------------------------------------------------
 
 // healthHandler verifies that the HTTP server is running.
 func healthHandler(w http.ResponseWriter, r *http.Request) {
@@ -193,6 +270,10 @@ func healthHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	fmt.Fprintln(w, "OK")
 }
+
+// ------------------------------------------------------------
+// Hello endpoint
+// ------------------------------------------------------------
 
 // helloHandler is a simple development endpoint.
 func helloHandler(w http.ResponseWriter, r *http.Request) {
