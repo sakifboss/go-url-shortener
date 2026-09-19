@@ -2,10 +2,14 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"goshort/worker"
 	"net/http"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 	"time"
 
 	"goshort/auth"
@@ -50,6 +54,17 @@ func main() {
 	userRepository := repository.NewPostgresUserRepository(db)
 	refreshTokenRepository := repository.NewPostgresRefreshTokenRepository(db)
 
+	clickEventRepository := repository.NewPostgresClickEventRepository(db)
+	clickWorker := worker.NewClickWorkerPool(
+		clickEventRepository,
+		4,
+		1000,
+		5,
+		100*time.Millisecond,
+	)
+
+	clickWorker.Start()
+
 	// ------------------------------------------------------------
 	// Service layer
 	// ------------------------------------------------------------
@@ -84,7 +99,10 @@ func main() {
 	// Handler layer
 	// ------------------------------------------------------------
 
-	urlHandler := handler.NewURLHandler(urlService)
+	urlHandler := handler.NewURLHandler(
+		urlService,
+		clickWorker,
+	)
 	authHandler := handler.NewAuthHandler(authService)
 
 	// ------------------------------------------------------------
@@ -262,10 +280,48 @@ func main() {
 
 	fmt.Println("GoShort server starting on http://localhost:9000")
 
-	if err := server.ListenAndServe(); err != nil &&
-		err != http.ErrServerClosed {
-		fmt.Println("Server error:", err)
+	go func() {
+		if err := server.ListenAndServe(); err != nil &&
+			!errors.Is(err, http.ErrServerClosed) {
+
+			fmt.Println("Server error:", err)
+		}
+	}()
+	stop := make(chan os.Signal, 1)
+
+	signal.Notify(
+		stop,
+		os.Interrupt,
+		syscall.SIGTERM,
+	)
+
+	<-stop
+
+	fmt.Println("Shutdown signal received")
+
+	shutdownCtx, cancel := context.WithTimeout(
+		context.Background(),
+		10*time.Second,
+	)
+	defer cancel()
+
+	if err := server.Shutdown(shutdownCtx); err != nil {
+		fmt.Println("Server shutdown error:", err)
 	}
+
+	clickWorker.Shutdown()
+
+	fmt.Println("Click worker pool stopped")
+
+	if err := redisCache.Close(); err != nil {
+		fmt.Println("Redis close error:", err)
+	}
+
+	if err := db.Close(); err != nil {
+		fmt.Println("Database close error:", err)
+	}
+
+	fmt.Println("GoShort shutdown complete")
 }
 
 // ------------------------------------------------------------
