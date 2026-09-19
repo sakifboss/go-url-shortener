@@ -5,6 +5,73 @@ import (
 	"testing"
 )
 
+func TestValidateURLRejectsLocalHostnames(t *testing.T) {
+	tests := []string{
+		"http://localhost",
+		"https://localhost:8080",
+		"http://localhost.localdomain",
+	}
+
+	for _, testURL := range tests {
+		t.Run(testURL, func(t *testing.T) {
+			if err := validateURL(testURL); err == nil {
+				t.Fatalf("expected local hostname to be rejected: %s", testURL)
+			}
+		})
+	}
+}
+
+func TestValidateURLRejectsLoopbackAndPrivateIPs(t *testing.T) {
+	tests := []string{
+		"http://127.0.0.1",
+		"http://127.0.0.2",
+		"http://10.0.0.1",
+		"http://172.16.0.1",
+		"http://192.168.1.1",
+		"http://169.254.169.254",
+		"http://[::1]",
+	}
+
+	for _, testURL := range tests {
+		t.Run(testURL, func(t *testing.T) {
+			if err := validateURL(testURL); err == nil {
+				t.Fatalf("expected private/loopback IP to be rejected: %s", testURL)
+			}
+		})
+	}
+}
+
+func TestValidateURLRejectsCredentials(t *testing.T) {
+	tests := []string{
+		"http://user:password@example.com",
+		"https://user@example.com",
+	}
+
+	for _, testURL := range tests {
+		t.Run(testURL, func(t *testing.T) {
+			if err := validateURL(testURL); err == nil {
+				t.Fatalf("expected URL credentials to be rejected: %s", testURL)
+			}
+		})
+	}
+}
+
+func TestValidateURLAllowsPublicHTTPS(t *testing.T) {
+	tests := []string{
+		"https://example.com",
+		"https://example.com/path",
+		"https://example.com:443/path?q=test",
+	}
+
+	for _, testURL := range tests {
+		t.Run(testURL, func(t *testing.T) {
+			if err := validateURL(testURL); err != nil {
+				t.Fatalf("expected valid public URL, got error: %v", err)
+			}
+		})
+	}
+}
+
 func TestValidateURL(t *testing.T) {
 	tests := []struct {
 		name    string

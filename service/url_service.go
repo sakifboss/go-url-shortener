@@ -182,11 +182,27 @@ func validateURL(value string) error {
 	host := strings.TrimSpace(
 		parsedURL.Hostname(),
 	)
+	host = strings.ToLower(host)
 
 	if host == "" {
 		return fmt.Errorf(
 			"URL host is required",
 		)
+	}
+	if host == "localhost" ||
+		strings.HasSuffix(host, ".localhost") ||
+		host == "localhost.localdomain" {
+		return fmt.Errorf(
+			"URL host must not be localhost",
+		)
+	}
+
+	if ip := net.ParseIP(host); ip != nil {
+		if !isPublicIP(ip) {
+			return fmt.Errorf(
+				"URL host must be a public IP address",
+			)
+		}
 	}
 
 	// Reject obvious internal IP destinations when the host
