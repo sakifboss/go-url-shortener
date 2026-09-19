@@ -1,20 +1,53 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 
 	"goshort/auth"
 	"goshort/model"
 	"goshort/repository"
-	"goshort/service"
 )
+
+// URLService defines the URL operations required by URLHandler.
+//
+// Both service.URLService and service.CachedURLService
+// satisfy this interface.
+type URLService interface {
+	CreateShortURL(
+		ctx context.Context,
+		originalURL string,
+		userID int64,
+	) (model.URL, error)
+
+	GetURLByID(
+		ctx context.Context,
+		id int64,
+	) (model.URL, error)
+
+	GetOriginalURL(
+		ctx context.Context,
+		shortCode string,
+	) (model.URL, error)
+
+	UpdateURL(
+		ctx context.Context,
+		url model.URL,
+	) (model.URL, error)
+
+	DeleteURL(
+		ctx context.Context,
+		id int64,
+	) error
+}
 
 // URLHandler handles HTTP requests related to URL operations.
 type URLHandler struct {
-	service *service.URLService
+	service URLService
 }
 
 // CreateURLRequest represents the JSON body accepted by the create endpoint.
@@ -37,9 +70,9 @@ type UpdateURLRequest struct {
 }
 
 // NewURLHandler creates an HTTP handler using the provided URL service.
-func NewURLHandler(service *service.URLService) *URLHandler {
+func NewURLHandler(urlService URLService) *URLHandler {
 	return &URLHandler{
-		service: service,
+		service: urlService,
 	}
 }
 
@@ -92,10 +125,19 @@ func (h *URLHandler) CreateURL(
 		return
 	}
 
+	baseURL := strings.TrimRight(
+		os.Getenv("GOSHORT_PUBLIC_BASE_URL"),
+		"/",
+	)
+
+	if baseURL == "" {
+		baseURL = "http://localhost:9000"
+	}
+
 	response := CreateURLResponse{
 		ID:        createdURL.ID,
 		ShortCode: createdURL.ShortCode,
-		ShortURL:  "http://localhost:8080/" + createdURL.ShortCode,
+		ShortURL:  baseURL + "/" + createdURL.ShortCode,
 	}
 
 	writeJSON(

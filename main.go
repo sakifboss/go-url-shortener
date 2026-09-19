@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"os"
@@ -8,6 +9,7 @@ import (
 	"time"
 
 	"goshort/auth"
+	"goshort/cache"
 	"goshort/database"
 	"goshort/handler"
 	"goshort/repository"
@@ -52,8 +54,22 @@ func main() {
 	// Service layer
 	// ------------------------------------------------------------
 
-	urlService := service.NewURLService(urlRepository)
+	redisCache, err := cache.NewRedisCache()
+	if err != nil {
+		fmt.Println("Redis configuration error:", err)
+		return
+	}
+	defer redisCache.Close()
 
+	if err := redisCache.Ping(context.Background()); err != nil {
+		fmt.Println("Redis connection error:", err)
+		return
+	}
+
+	urlService := service.NewCachedURLService(
+		urlRepository,
+		redisCache,
+	)
 	authService, err := auth.NewAuthService(
 		userRepository,
 		refreshTokenRepository,
@@ -240,11 +256,11 @@ func main() {
 	// ------------------------------------------------------------
 
 	server := &http.Server{
-		Addr:    ":8080",
+		Addr:    ":9000",
 		Handler: handlerChain,
 	}
 
-	fmt.Println("GoShort server starting on http://localhost:8080")
+	fmt.Println("GoShort server starting on http://localhost:9000")
 
 	if err := server.ListenAndServe(); err != nil &&
 		err != http.ErrServerClosed {
