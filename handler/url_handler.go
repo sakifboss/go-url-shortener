@@ -2,11 +2,16 @@ package handler
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
+	"goshort/worker"
+	"log"
 	"net/http"
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"goshort/auth"
 	"goshort/model"
@@ -47,7 +52,8 @@ type URLService interface {
 
 // URLHandler handles HTTP requests related to URL operations.
 type URLHandler struct {
-	service URLService
+	service     URLService
+	clickWorker *worker.ClickWorkerPool
 }
 
 // CreateURLRequest represents the JSON body accepted by the create endpoint.
@@ -70,9 +76,13 @@ type UpdateURLRequest struct {
 }
 
 // NewURLHandler creates an HTTP handler using the provided URL service.
-func NewURLHandler(urlService URLService) *URLHandler {
+func NewURLHandler(
+	service URLService,
+	clickWorker *worker.ClickWorkerPool,
+) *URLHandler {
 	return &URLHandler{
-		service: urlService,
+		service:     service,
+		clickWorker: clickWorker,
 	}
 }
 
@@ -379,51 +389,44 @@ func (h *URLHandler) DeleteURL(
 }
 
 // Redirect handles GET /:shortCode.
-func (h *URLHandler) Redirect(
-	w http.ResponseWriter,
-	r *http.Request,
-) {
-	if r.Method != http.MethodGet {
-		http.Error(
-			w,
-			"Method Not Allowed",
-			http.StatusMethodNotAllowed,
-		)
-		return
-	}
-
-	shortCode := strings.TrimPrefix(
-		r.URL.Path,
-		"/",
-	)
+func (h *URLHandler) Redirect(w http.ResponseWriter, r *http.Request) {
+	shortCode := strings.TrimPrefix(r.URL.Path, "/")
 
 	if shortCode == "" {
 		http.NotFound(w, r)
 		return
 	}
 
-	storedURL, err := h.service.GetOriginalURL(
-		r.Context(),
-		shortCode,
-	)
+	url, err := h.service.GetOriginalURL(r.Context(), shortCode)
 	if err != nil {
-		if repository.IsNotFound(err) {
-			http.NotFound(w, r)
-			return
+		http.NotFound(w, r)
+		return
+	}
+
+	eventKey, err := generateEventKey()
+
+	if err == nil && h.clickWorker != nil {
+		event := model.ClickEvent{
+			EventKey:       eventKey,
+			URLID:          url.ID,
+			ClickedAt:      time.Now().UTC(),
+			UserAgent:      r.UserAgent(),
+			Referrer:       r.Referer(),
+			DeviceCategory: detectDeviceCategory(r.UserAgent()),
 		}
 
-		http.Error(
-			w,
-			"Internal Server Error",
-			http.StatusInternalServerError,
-		)
-		return
+		if err := h.clickWorker.Enqueue(r.Context(), event); err != nil {
+			log.Printf(
+				"click event enqueue failed: %v",
+				err,
+			)
+		}
 	}
 
 	http.Redirect(
 		w,
 		r,
-		storedURL.OriginalURL,
+		url.OriginalURL,
 		http.StatusFound,
 	)
 }
@@ -490,4 +493,27 @@ func writeJSON(
 	w.WriteHeader(status)
 
 	_ = json.NewEncoder(w).Encode(data)
+}
+func generateEventKey() (string, error) {
+	b := make([]byte, 16)
+
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+
+	return hex.EncodeToString(b), nil
+}
+func detectDeviceCategory(userAgent string) string {
+	ua := strings.ToLower(userAgent)
+
+	switch {
+	case strings.Contains(ua, "tablet"):
+		return "tablet"
+
+	case strings.Contains(ua, "mobile"):
+		return "mobile"
+
+	default:
+		return "desktop"
+	}
 }
