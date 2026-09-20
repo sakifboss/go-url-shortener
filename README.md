@@ -289,6 +289,37 @@ go run .
 
 The server listens on `http://localhost:9000`.
 
+### Run with Docker Compose
+
+Docker Compose starts the GoShort app, PostgreSQL, Redis, and all migrations:
+
+```powershell
+docker compose up --build
+```
+
+Health check:
+
+```powershell
+Invoke-WebRequest http://localhost:9000/health
+```
+
+Stop the stack:
+
+```powershell
+docker compose down
+```
+
+Migrations run automatically only when the PostgreSQL volume is initialized. To
+recreate the local database and run all migrations from the beginning:
+
+```powershell
+docker compose down -v
+docker compose up --build
+```
+
+The Compose file uses development-only credentials. Set a strong
+`GOSHORT_JWT_SECRET` before using this setup outside local development.
+
 Health check:
 
 ```powershell

@@ -1,0 +1,49 @@
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: goshort
+    volumes:
+      - goshort-postgres-data:/var/lib/postgresql/data
+      - ./migration:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d goshort"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    volumes:
+      - goshort-redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: goshort-app
+    environment:
+      GOSHORT_DATABASE_URL: postgres://postgres:postgres@postgres:5432/goshort?sslmode=disable
+      GOSHORT_JWT_SECRET: local-development-secret
+      GOSHORT_REDIS_ADDR: redis:6379
+      GOSHORT_REDIS_PASSWORD: ""
+      GOSHORT_REDIS_DB: "0"
+      GOSHORT_PUBLIC_BASE_URL: http://localhost:9000
+    ports:
+      - "9000:9000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+volumes:
+  goshort-postgres-data:
+  goshort-redis-data:
