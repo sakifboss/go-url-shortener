@@ -5,17 +5,19 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
-	"goshort/worker"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"goshort/auth"
 	"goshort/model"
 	"goshort/repository"
+	"goshort/worker"
 )
 
 // URLService defines the URL operations required by URLHandler.
@@ -52,8 +54,9 @@ type URLService interface {
 
 // URLHandler handles HTTP requests related to URL operations.
 type URLHandler struct {
-	service     URLService
-	clickWorker *worker.ClickWorkerPool
+	service         URLService
+	clickWorker     *worker.ClickWorkerPool
+	idempotencyRepo repository.IdempotencyRepository
 }
 
 // CreateURLRequest represents the JSON body accepted by the create endpoint.
@@ -76,14 +79,49 @@ type UpdateURLRequest struct {
 }
 
 // NewURLHandler creates an HTTP handler using the provided URL service.
+var (
+	idempotencyMu    sync.Mutex
+	idempotencyLocks = make(map[string]*sync.Mutex)
+)
+
+func getIdempotencyLock(key string) *sync.Mutex {
+	idempotencyMu.Lock()
+	defer idempotencyMu.Unlock()
+
+	lock, exists := idempotencyLocks[key]
+
+	if !exists {
+		lock = &sync.Mutex{}
+		idempotencyLocks[key] = lock
+	}
+
+	return lock
+}
+
 func NewURLHandler(
 	service URLService,
 	clickWorker *worker.ClickWorkerPool,
+	idempotencyRepo repository.IdempotencyRepository,
 ) *URLHandler {
 	return &URLHandler{
-		service:     service,
-		clickWorker: clickWorker,
+		service:         service,
+		clickWorker:     clickWorker,
+		idempotencyRepo: idempotencyRepo,
 	}
+}
+
+func writeStoredIdempotencyResponse(
+	w http.ResponseWriter,
+	record *repository.IdempotencyRecord,
+) {
+	w.Header().Set(
+		"Content-Type",
+		"application/json",
+	)
+
+	w.WriteHeader(record.StatusCode)
+
+	_, _ = w.Write(record.ResponseBody)
 }
 
 // CreateURL handles POST /api/v1/urls.
@@ -110,29 +148,184 @@ func (h *URLHandler) CreateURL(
 		return
 	}
 
-	var request CreateURLRequest
+	idempotencyKey := strings.TrimSpace(
+		r.Header.Get("Idempotency-Key"),
+	)
 
-	if err := decodeJSONBody(w, r, &request); err != nil {
+	if len(idempotencyKey) > 255 {
 		http.Error(
 			w,
-			err.Error(),
+			"Idempotency-Key is too long",
 			http.StatusBadRequest,
 		)
 		return
 	}
 
-	createdURL, err := h.service.CreateShortURL(
-		r.Context(),
-		request.URL,
+	// No Idempotency-Key means normal request processing.
+	if idempotencyKey == "" {
+		h.createURL(w, r, user.UserID)
+		return
+	}
+
+	if h.idempotencyRepo == nil {
+		http.Error(
+			w,
+			"Idempotency service unavailable",
+			http.StatusInternalServerError,
+		)
+		return
+	}
+
+	lockKey := fmt.Sprintf(
+		"%d:%s",
 		user.UserID,
+		idempotencyKey,
+	)
+
+	lock := getIdempotencyLock(lockKey)
+	lock.Lock()
+	defer lock.Unlock()
+
+	// Check whether this request was already completed.
+	record, err := h.idempotencyRepo.Get(
+		r.Context(),
+		user.UserID,
+		idempotencyKey,
 	)
 	if err != nil {
 		http.Error(
 			w,
-			err.Error(),
-			http.StatusBadRequest,
+			"Internal Server Error",
+			http.StatusInternalServerError,
 		)
 		return
+	}
+
+	if record != nil {
+		writeStoredIdempotencyResponse(w, record)
+		return
+	}
+
+	// First request with this Idempotency-Key.
+	responseBody, statusCode, err := h.createURLResponse(
+		w,
+		r,
+		user.UserID,
+	)
+
+	if err != nil {
+		http.Error(
+			w,
+			err.Error(),
+			statusCode,
+		)
+		return
+	}
+
+	record = &repository.IdempotencyRecord{
+		UserID:         user.UserID,
+		IdempotencyKey: idempotencyKey,
+		ResponseBody:   responseBody,
+		StatusCode:     statusCode,
+	}
+
+	inserted, err := h.idempotencyRepo.Create(
+		r.Context(),
+		*record,
+	)
+
+	if err != nil {
+		http.Error(
+			w,
+			"Failed to store idempotency record",
+			http.StatusInternalServerError,
+		)
+		return
+	}
+
+	if !inserted {
+		existing, err := h.idempotencyRepo.Get(
+			r.Context(),
+			user.UserID,
+			idempotencyKey,
+		)
+
+		if err != nil {
+			http.Error(
+				w,
+				"Failed to load idempotency record",
+				http.StatusInternalServerError,
+			)
+			return
+		}
+
+		if existing == nil {
+			http.Error(
+				w,
+				"Idempotency record unavailable",
+				http.StatusInternalServerError,
+			)
+			return
+		}
+
+		writeStoredIdempotencyResponse(w, existing)
+		return
+	}
+
+	writeStoredIdempotencyResponse(w, record)
+}
+
+func (h *URLHandler) createURL(
+	w http.ResponseWriter,
+	r *http.Request,
+	userID int64,
+) {
+	responseBody, statusCode, err := h.createURLResponse(
+		w,
+		r,
+		userID,
+	)
+
+	if err != nil {
+		http.Error(
+			w,
+			err.Error(),
+			statusCode,
+		)
+		return
+	}
+
+	w.Header().Set(
+		"Content-Type",
+		"application/json",
+	)
+
+	w.WriteHeader(statusCode)
+
+	_, _ = w.Write(responseBody)
+}
+func (h *URLHandler) createURLResponse(
+	w http.ResponseWriter,
+	r *http.Request,
+	userID int64,
+) ([]byte, int, error) {
+	var request CreateURLRequest
+
+	if err := decodeJSONBody(
+		w,
+		r,
+		&request,
+	); err != nil {
+		return nil, http.StatusBadRequest, err
+	}
+
+	createdURL, err := h.service.CreateShortURL(
+		r.Context(),
+		request.URL,
+		userID,
+	)
+	if err != nil {
+		return nil, http.StatusBadRequest, err
 	}
 
 	baseURL := strings.TrimRight(
@@ -150,11 +343,12 @@ func (h *URLHandler) CreateURL(
 		ShortURL:  baseURL + "/" + createdURL.ShortCode,
 	}
 
-	writeJSON(
-		w,
-		http.StatusCreated,
-		response,
-	)
+	body, err := json.Marshal(response)
+	if err != nil {
+		return nil, http.StatusInternalServerError, err
+	}
+
+	return body, http.StatusCreated, nil
 }
 
 // GetURL handles GET /api/v1/urls/:id.
