@@ -107,6 +107,46 @@ func (r *testIdempotencyRepository) Create(
 	return true, nil
 }
 
+func (r *testIdempotencyRepository) Reserve(
+	_ context.Context,
+	userID int64,
+	key string,
+) (bool, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	recordKey := idempotencyRecordKey(userID, key)
+	if _, exists := r.records[recordKey]; exists {
+		return false, nil
+	}
+
+	r.records[recordKey] = &repository.IdempotencyRecord{
+		UserID:         userID,
+		IdempotencyKey: key,
+		ResponseBody:   []byte(`{}`),
+		StatusCode:     0,
+		State:          "pending",
+	}
+	return true, nil
+}
+
+func (r *testIdempotencyRepository) Complete(
+	_ context.Context,
+	record repository.IdempotencyRecord,
+) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	stored := r.records[idempotencyRecordKey(record.UserID, record.IdempotencyKey)]
+	if stored == nil {
+		return context.Canceled
+	}
+
+	*stored = record
+	stored.ResponseBody = append([]byte(nil), record.ResponseBody...)
+	return nil
+}
+
 func idempotencyRecordKey(userID int64, key string) string {
 	return string(rune(userID)) + ":" + key
 }

@@ -202,11 +202,73 @@ func (h *URLHandler) CreateURL(
 	}
 
 	if record != nil {
+		if record.State == "pending" {
+			w.Header().Set("Retry-After", "1")
+			http.Error(
+				w,
+				"Request with this Idempotency-Key is in progress",
+				http.StatusConflict,
+			)
+			return
+		}
+
 		writeStoredIdempotencyResponse(w, record)
 		return
 	}
 
-	// First request with this Idempotency-Key.
+	reserved, err := h.idempotencyRepo.Reserve(
+		r.Context(),
+		user.UserID,
+		idempotencyKey,
+	)
+	if err != nil {
+		http.Error(
+			w,
+			"Failed to reserve idempotency key",
+			http.StatusInternalServerError,
+		)
+		return
+	}
+
+	if !reserved {
+		existing, err := h.idempotencyRepo.Get(
+			r.Context(),
+			user.UserID,
+			idempotencyKey,
+		)
+		if err != nil {
+			http.Error(
+				w,
+				"Failed to load idempotency record",
+				http.StatusInternalServerError,
+			)
+			return
+		}
+
+		if existing == nil {
+			http.Error(
+				w,
+				"Idempotency record unavailable",
+				http.StatusInternalServerError,
+			)
+			return
+		}
+
+		if existing.State == "pending" {
+			w.Header().Set("Retry-After", "1")
+			http.Error(
+				w,
+				"Request with this Idempotency-Key is in progress",
+				http.StatusConflict,
+			)
+			return
+		}
+
+		writeStoredIdempotencyResponse(w, existing)
+		return
+	}
+
+	// This request owns the reservation and may create the URL.
 	responseBody, statusCode, err := h.createURLResponse(
 		w,
 		r,
@@ -227,48 +289,18 @@ func (h *URLHandler) CreateURL(
 		IdempotencyKey: idempotencyKey,
 		ResponseBody:   responseBody,
 		StatusCode:     statusCode,
+		State:          "completed",
 	}
 
-	inserted, err := h.idempotencyRepo.Create(
+	if err := h.idempotencyRepo.Complete(
 		r.Context(),
 		*record,
-	)
-
-	if err != nil {
+	); err != nil {
 		http.Error(
 			w,
-			"Failed to store idempotency record",
+			"Failed to complete idempotency record",
 			http.StatusInternalServerError,
 		)
-		return
-	}
-
-	if !inserted {
-		existing, err := h.idempotencyRepo.Get(
-			r.Context(),
-			user.UserID,
-			idempotencyKey,
-		)
-
-		if err != nil {
-			http.Error(
-				w,
-				"Failed to load idempotency record",
-				http.StatusInternalServerError,
-			)
-			return
-		}
-
-		if existing == nil {
-			http.Error(
-				w,
-				"Idempotency record unavailable",
-				http.StatusInternalServerError,
-			)
-			return
-		}
-
-		writeStoredIdempotencyResponse(w, existing)
 		return
 	}
 

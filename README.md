@@ -188,7 +188,8 @@ Protected request -> Validate JWT -> Attach current user to request context
 │   ├── 001_init.sql             # Users and URLs
 │   ├── 002_auth.sql             # Authentication fields and refresh tokens
 │   ├── 003_click_events.sql     # Click-event storage and indexes
-│   └── 004_idempotency.sql      # Idempotent request records
+│   ├── 004_idempotency.sql      # Idempotent request records
+│   └── 005_idempotency_reservations.sql # Cross-instance reservations
 │
 ├── model/
 │   ├── click_event.go
@@ -272,9 +273,10 @@ psql "$env:GOSHORT_DATABASE_URL" -f migration/001_init.sql
 psql "$env:GOSHORT_DATABASE_URL" -f migration/002_auth.sql
 psql "$env:GOSHORT_DATABASE_URL" -f migration/003_click_events.sql
 psql "$env:GOSHORT_DATABASE_URL" -f migration/004_idempotency.sql
+psql "$env:GOSHORT_DATABASE_URL" -f migration/005_idempotency_reservations.sql
 ```
 
-The schema stores users, URLs, hashed refresh tokens, click events, and idempotency records. The `(user_id, idempotency_key)` uniqueness constraint prevents duplicate idempotency records for the same user.
+The schema stores users, URLs, hashed refresh tokens, click events, and idempotency records. The `(user_id, idempotency_key)` uniqueness constraint prevents duplicate idempotency records for the same user. A pending idempotency reservation is created before URL creation, preventing duplicate URL creation across multiple application instances.
 
 ## Run Locally
 

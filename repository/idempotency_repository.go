@@ -12,6 +12,7 @@ type IdempotencyRecord struct {
 	IdempotencyKey string
 	ResponseBody   []byte
 	StatusCode     int
+	State          string
 }
 
 type IdempotencyRepository interface {
@@ -20,6 +21,17 @@ type IdempotencyRepository interface {
 		userID int64,
 		key string,
 	) (*IdempotencyRecord, error)
+
+	Reserve(
+		ctx context.Context,
+		userID int64,
+		key string,
+	) (bool, error)
+
+	Complete(
+		ctx context.Context,
+		record IdempotencyRecord,
+	) error
 
 	Create(
 		ctx context.Context,
@@ -41,7 +53,7 @@ func (r *PostgresIdempotencyRepository) Get(
 	key string,
 ) (*IdempotencyRecord, error) {
 	const query = `
-		SELECT user_id, idempotency_key, response_body, status_code
+		SELECT user_id, idempotency_key, response_body, status_code, state
 		FROM idempotency_keys
 		WHERE user_id = $1 AND idempotency_key = $2
 	`
@@ -58,6 +70,7 @@ func (r *PostgresIdempotencyRepository) Get(
 		&record.IdempotencyKey,
 		&record.ResponseBody,
 		&record.StatusCode,
+		&record.State,
 	)
 
 	if err != nil {
@@ -69,6 +82,84 @@ func (r *PostgresIdempotencyRepository) Get(
 	}
 
 	return &record, nil
+}
+
+func (r *PostgresIdempotencyRepository) Reserve(
+	ctx context.Context,
+	userID int64,
+	key string,
+) (bool, error) {
+	const query = `
+		INSERT INTO idempotency_keys (
+			user_id,
+			idempotency_key,
+			response_body,
+			status_code,
+			state
+		)
+		VALUES ($1, $2, '{}'::jsonb, 0, 'pending')
+		ON CONFLICT (user_id, idempotency_key)
+		DO NOTHING
+		RETURNING id
+	`
+
+	var id int64
+	err := r.db.QueryRowContext(
+		ctx,
+		query,
+		userID,
+		key,
+	).Scan(&id)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return false, nil
+		}
+
+		return false, fmt.Errorf("reserve idempotency record: %w", err)
+	}
+
+	return true, nil
+}
+
+func (r *PostgresIdempotencyRepository) Complete(
+	ctx context.Context,
+	record IdempotencyRecord,
+) error {
+	if !json.Valid(record.ResponseBody) {
+		return fmt.Errorf("invalid response JSON")
+	}
+
+	const query = `
+		UPDATE idempotency_keys
+		SET response_body = $1,
+			status_code = $2,
+			state = 'completed'
+		WHERE user_id = $3
+		  AND idempotency_key = $4
+		  AND state = 'pending'
+	`
+
+	result, err := r.db.ExecContext(
+		ctx,
+		query,
+		record.ResponseBody,
+		record.StatusCode,
+		record.UserID,
+		record.IdempotencyKey,
+	)
+	if err != nil {
+		return fmt.Errorf("complete idempotency record: %w", err)
+	}
+
+	updated, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("check idempotency completion: %w", err)
+	}
+	if updated != 1 {
+		return fmt.Errorf("idempotency record was not pending")
+	}
+
+	return nil
 }
 
 func (r *PostgresIdempotencyRepository) Create(
@@ -84,9 +175,10 @@ func (r *PostgresIdempotencyRepository) Create(
 			user_id,
 			idempotency_key,
 			response_body,
-			status_code
+			status_code,
+			state
 		)
-		VALUES ($1, $2, $3, $4)
+		VALUES ($1, $2, $3, $4, 'completed')
 		ON CONFLICT (user_id, idempotency_key)
 		DO NOTHING
 		RETURNING id
