@@ -245,6 +245,10 @@ $env:GOSHORT_REDIS_DB = "0"
 $env:GOSHORT_PUBLIC_BASE_URL = "http://localhost:9000"
 ```
 
+For hosted Redis providers, `GOSHORT_REDIS_URL` or `REDIS_URL` may be used
+instead of separate Redis host and password variables. The URL must use the
+provider's complete Redis connection URL.
+
 Defaults:
 
 - Redis address: `localhost:6379`

@@ -29,6 +29,11 @@ type RedisCache struct {
 }
 
 func NewRedisCache() (*RedisCache, error) {
+	redisURL := os.Getenv("GOSHORT_REDIS_URL")
+	if redisURL == "" {
+		redisURL = os.Getenv("REDIS_URL")
+	}
+
 	addr := os.Getenv("GOSHORT_REDIS_ADDR")
 	if addr == "" {
 		addr = defaultRedisAddr
@@ -47,19 +52,32 @@ func NewRedisCache() (*RedisCache, error) {
 		db = parsedDB
 	}
 
-	client := redis.NewClient(&redis.Options{
+	options := &redis.Options{
 		Addr:     addr,
 		Password: password,
 		DB:       db,
+	}
 
-		PoolSize:     10,
-		MinIdleConns: 2,
-		MaxIdleConns: 5,
+	if redisURL != "" {
+		parsedOptions, err := redis.ParseURL(redisURL)
+		if err != nil {
+			return nil, fmt.Errorf("invalid Redis URL: %w", err)
+		}
 
-		DialTimeout:  3 * time.Second,
-		ReadTimeout:  2 * time.Second,
-		WriteTimeout: 2 * time.Second,
-	})
+		options = parsedOptions
+		if rawDB := os.Getenv("GOSHORT_REDIS_DB"); rawDB != "" {
+			options.DB = db
+		}
+	}
+
+	client := redis.NewClient(options)
+
+	client.Options().PoolSize = 10
+	client.Options().MinIdleConns = 2
+	client.Options().MaxIdleConns = 5
+	client.Options().DialTimeout = 3 * time.Second
+	client.Options().ReadTimeout = 2 * time.Second
+	client.Options().WriteTimeout = 2 * time.Second
 
 	return &RedisCache{
 		client: client,
