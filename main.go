@@ -99,9 +99,13 @@ func main() {
 	// Handler layer
 	// ------------------------------------------------------------
 
+	idempotencyRepository :=
+		repository.NewPostgresIdempotencyRepository(db)
+
 	urlHandler := handler.NewURLHandler(
 		urlService,
 		clickWorker,
+		idempotencyRepository,
 	)
 	authHandler := handler.NewAuthHandler(authService)
 
