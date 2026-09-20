@@ -276,13 +276,19 @@ func main() {
 	// ------------------------------------------------------------
 	// HTTP server
 	// ------------------------------------------------------------
+	port := strings.TrimSpace(os.Getenv("PORT"))
+	if port == "" {
+		port = "9000"
+	}
+
+	addr := ":" + port
 
 	server := &http.Server{
-		Addr:    ":9000",
+		Addr:    addr,
 		Handler: handlerChain,
 	}
 
-	fmt.Println("GoShort server starting on http://localhost:9000")
+	fmt.Printf("GoShort server starting on %s\n", addr)
 
 	go func() {
 		if err := server.ListenAndServe(); err != nil &&
