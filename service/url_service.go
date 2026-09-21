@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net"
 	"net/url"
+	"regexp"
 	"strings"
 
 	"github.com/jackc/pgx/v5/pgconn"
@@ -19,7 +20,11 @@ const (
 	base62Alphabet        = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 	shortCodeLength       = 6
 	maxGenerationAttempts = 10
+	minAliasLength        = 3
+	maxAliasLength        = 32
 )
+
+var customAliasPattern = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
 
 // URLService contains URL shortening business logic.
 type URLService struct {
@@ -88,6 +93,48 @@ func (s *URLService) CreateShortURL(
 	return model.URL{}, fmt.Errorf(
 		"unable to generate unique short code",
 	)
+}
+
+func (s *URLService) CreateShortURLWithAlias(
+	ctx context.Context,
+	originalURL string,
+	alias string,
+	userID int64,
+) (model.URL, error) {
+	if err := validateURL(originalURL); err != nil {
+		return model.URL{}, err
+	}
+
+	if userID <= 0 {
+		return model.URL{}, fmt.Errorf("invalid user ID")
+	}
+
+	alias = strings.TrimSpace(alias)
+	if len(alias) < minAliasLength || len(alias) > maxAliasLength {
+		return model.URL{}, fmt.Errorf("alias must be between 3 and 32 characters")
+	}
+	if !customAliasPattern.MatchString(alias) {
+		return model.URL{}, fmt.Errorf("alias may contain only letters, numbers, hyphens, and underscores")
+	}
+
+	createdURL := model.URL{
+		ShortCode:   alias,
+		CustomAlias: &alias,
+		OriginalURL: strings.TrimSpace(originalURL),
+		UserID:      &userID,
+		IsActive:    true,
+	}
+
+	createdURL, err := s.repository.Create(ctx, createdURL)
+	if err != nil {
+		if isUniqueViolation(err) {
+			return model.URL{}, fmt.Errorf("alias is already in use")
+		}
+
+		return model.URL{}, fmt.Errorf("create shortened URL: %w", err)
+	}
+
+	return createdURL, nil
 }
 
 // GetURLByID returns a URL by its database ID.

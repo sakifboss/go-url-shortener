@@ -39,12 +39,13 @@ func (r *PostgresURLRepository) Create(
 	const query = `
 		INSERT INTO urls (
 			short_code,
+			custom_alias,
 			original_url,
 			user_id,
 			expires_at,
 			is_active
 		)
-		VALUES ($1, $2, $3, $4, $5)
+		VALUES ($1, $2, $3, $4, $5, $6)
 		RETURNING id, created_at
 	`
 
@@ -52,6 +53,7 @@ func (r *PostgresURLRepository) Create(
 		ctx,
 		query,
 		url.ShortCode,
+		url.CustomAlias,
 		url.OriginalURL,
 		url.UserID,
 		url.ExpiresAt,
@@ -77,6 +79,7 @@ func (r *PostgresURLRepository) FindByID(
 		SELECT
 			id,
 			short_code,
+			custom_alias,
 			original_url,
 			user_id,
 			created_at,
@@ -91,6 +94,7 @@ func (r *PostgresURLRepository) FindByID(
 	err := r.db.QueryRowContext(ctx, query, id).Scan(
 		&url.ID,
 		&url.ShortCode,
+		&url.CustomAlias,
 		&url.OriginalURL,
 		&url.UserID,
 		&url.CreatedAt,
@@ -114,6 +118,7 @@ func (r *PostgresURLRepository) FindByShortCode(
 		SELECT
 			id,
 			short_code,
+			custom_alias,
 			original_url,
 			user_id,
 			created_at,
@@ -130,6 +135,7 @@ func (r *PostgresURLRepository) FindByShortCode(
 	err := r.db.QueryRowContext(ctx, query, shortCode).Scan(
 		&url.ID,
 		&url.ShortCode,
+		&url.CustomAlias,
 		&url.OriginalURL,
 		&url.UserID,
 		&url.CreatedAt,
@@ -159,6 +165,7 @@ func (r *PostgresURLRepository) Update(
 		RETURNING
 			id,
 			short_code,
+			custom_alias,
 			original_url,
 			user_id,
 			created_at,
@@ -178,6 +185,7 @@ func (r *PostgresURLRepository) Update(
 	).Scan(
 		&updated.ID,
 		&updated.ShortCode,
+		&updated.CustomAlias,
 		&updated.OriginalURL,
 		&updated.UserID,
 		&updated.CreatedAt,

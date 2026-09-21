@@ -39,6 +39,15 @@ func (s *testURLService) CreateShortURL(
 	}, nil
 }
 
+func (s *testURLService) CreateShortURLWithAlias(
+	ctx context.Context,
+	originalURL string,
+	alias string,
+	userID int64,
+) (model.URL, error) {
+	return s.CreateShortURL(ctx, originalURL, userID)
+}
+
 func (s *testURLService) GetURLByID(
 	_ context.Context,
 	_ int64,

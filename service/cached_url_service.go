@@ -39,6 +39,22 @@ func (s *CachedURLService) CreateShortURL(
 	)
 }
 
+func (s *CachedURLService) CreateShortURLWithAlias(
+	ctx context.Context,
+	originalURL string,
+	alias string,
+	userID int64,
+) (model.URL, error) {
+	baseService := NewURLService(s.repository)
+
+	return baseService.CreateShortURLWithAlias(
+		ctx,
+		originalURL,
+		alias,
+		userID,
+	)
+}
+
 func (s *CachedURLService) GetURLByID(
 	ctx context.Context,
 	id int64,

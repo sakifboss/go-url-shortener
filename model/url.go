@@ -6,6 +6,7 @@ import "time"
 type URL struct {
 	ID          int64
 	ShortCode   string
+	CustomAlias *string
 	OriginalURL string
 	UserID      *int64
 	CreatedAt   time.Time

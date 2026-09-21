@@ -189,7 +189,8 @@ Protected request -> Validate JWT -> Attach current user to request context
 │   ├── 002_auth.sql             # Authentication fields and refresh tokens
 │   ├── 003_click_events.sql     # Click-event storage and indexes
 │   ├── 004_idempotency.sql      # Idempotent request records
-│   └── 005_idempotency_reservations.sql # Cross-instance reservations
+│   ├── 005_idempotency_reservations.sql # Cross-instance reservations
+│   └── 006_custom_alias.sql     # Optional user-selected aliases
 │
 ├── model/
 │   ├── click_event.go
@@ -268,6 +269,8 @@ migration/001_init.sql
 migration/002_auth.sql
 migration/003_click_events.sql
 migration/004_idempotency.sql
+migration/005_idempotency_reservations.sql
+migration/006_custom_alias.sql
 ```
 
 For example, with `psql`:
@@ -278,6 +281,7 @@ psql "$env:GOSHORT_DATABASE_URL" -f migration/002_auth.sql
 psql "$env:GOSHORT_DATABASE_URL" -f migration/003_click_events.sql
 psql "$env:GOSHORT_DATABASE_URL" -f migration/004_idempotency.sql
 psql "$env:GOSHORT_DATABASE_URL" -f migration/005_idempotency_reservations.sql
+psql "$env:GOSHORT_DATABASE_URL" -f migration/006_custom_alias.sql
 ```
 
 The schema stores users, URLs, hashed refresh tokens, click events, and idempotency records. The `(user_id, idempotency_key)` uniqueness constraint prevents duplicate idempotency records for the same user. A pending idempotency reservation is created before URL creation, preventing duplicate URL creation across multiple application instances.
@@ -416,7 +420,8 @@ Idempotency-Key: create-url-001
 
 ```json
 {
-  "url": "https://example.com/a-long-resource"
+  "url": "https://example.com/a-long-resource",
+  "alias": "docs"
 }
 ```
 
@@ -425,12 +430,13 @@ Response:
 ```json
 {
   "id": 1,
-  "short_code": "aZ91xK",
-  "short_url": "http://localhost:9000/aZ91xK"
+  "short_code": "docs",
+  "short_url": "http://localhost:9000/docs"
 }
 ```
 
 `Idempotency-Key` is optional. When supplied, repeating the request for the same authenticated user returns the stored response instead of creating another URL.
+The `alias` field is optional. Aliases must be 3-32 characters and contain only letters, numbers, hyphens, or underscores. An alias can only be used once.
 
 #### Get a URL
 

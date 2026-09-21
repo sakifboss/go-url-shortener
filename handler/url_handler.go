@@ -31,6 +31,13 @@ type URLService interface {
 		userID int64,
 	) (model.URL, error)
 
+	CreateShortURLWithAlias(
+		ctx context.Context,
+		originalURL string,
+		alias string,
+		userID int64,
+	) (model.URL, error)
+
 	GetURLByID(
 		ctx context.Context,
 		id int64,
@@ -61,7 +68,8 @@ type URLHandler struct {
 
 // CreateURLRequest represents the JSON body accepted by the create endpoint.
 type CreateURLRequest struct {
-	URL string `json:"url"`
+	URL   string `json:"url"`
+	Alias string `json:"alias,omitempty"`
 }
 
 // CreateURLResponse represents the public API response for a created URL.
@@ -351,11 +359,22 @@ func (h *URLHandler) createURLResponse(
 		return nil, http.StatusBadRequest, err
 	}
 
-	createdURL, err := h.service.CreateShortURL(
-		r.Context(),
-		request.URL,
-		userID,
-	)
+	var createdURL model.URL
+	var err error
+	if strings.TrimSpace(request.Alias) == "" {
+		createdURL, err = h.service.CreateShortURL(
+			r.Context(),
+			request.URL,
+			userID,
+		)
+	} else {
+		createdURL, err = h.service.CreateShortURLWithAlias(
+			r.Context(),
+			request.URL,
+			request.Alias,
+			userID,
+		)
+	}
 	if err != nil {
 		return nil, http.StatusBadRequest, err
 	}
