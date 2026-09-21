@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -52,7 +53,29 @@ func (s *testURLService) GetURLByID(
 	_ context.Context,
 	_ int64,
 ) (model.URL, error) {
-	return model.URL{}, nil
+	userID := int64(1)
+	return model.URL{ID: 1, UserID: &userID}, nil
+}
+
+type testAnalyticsRepository struct{}
+
+func (testAnalyticsRepository) GetAnalytics(
+	_ context.Context,
+	_ int64,
+) (model.ClickAnalytics, error) {
+	return model.ClickAnalytics{
+		TotalClicks: 3,
+		ByDevice: []model.AnalyticsCount{
+			{Name: "mobile", Count: 2},
+			{Name: "desktop", Count: 1},
+		},
+		ByReferrer: []model.AnalyticsCount{
+			{Name: "direct", Count: 3},
+		},
+		DailyClicks: []model.DailyClickCount{
+			{Date: "2026-09-21", Count: 3},
+		},
+	}, nil
 }
 
 func (s *testURLService) GetOriginalURL(
@@ -223,6 +246,45 @@ func TestCreateURL_IdempotencyConcurrent(t *testing.T) {
 
 	if calls := service.calls.Load(); calls != 1 {
 		t.Fatalf("CreateShortURL calls = %d, want 1", calls)
+	}
+}
+
+func TestGetAnalyticsRequiresOwnershipAndReturnsAggregates(t *testing.T) {
+	service := &testURLService{}
+	handler := NewURLHandler(
+		service,
+		nil,
+		nil,
+		testAnalyticsRepository{},
+	)
+
+	middleware, err := auth.NewAuthMiddleware(handlerTestJWTSecret)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	request := httptest.NewRequest(
+		http.MethodGet,
+		"/api/v1/urls/1/analytics",
+		nil,
+	)
+	request.Header.Set("Authorization", "Bearer "+handlerTestToken(t))
+	response := httptest.NewRecorder()
+
+	middleware.RequireAuth(
+		http.HandlerFunc(handler.GetAnalytics),
+	).ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", response.Code, http.StatusOK)
+	}
+
+	var analytics model.ClickAnalytics
+	if err := json.Unmarshal(response.Body.Bytes(), &analytics); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if analytics.TotalClicks != 3 {
+		t.Fatalf("total clicks = %d, want 3", analytics.TotalClicks)
 	}
 }
 

@@ -106,6 +106,7 @@ func main() {
 		urlService,
 		clickWorker,
 		idempotencyRepository,
+		clickEventRepository,
 	)
 	authHandler := handler.NewAuthHandler(authService)
 
@@ -200,16 +201,16 @@ func main() {
 		),
 	)
 
-	// GET    /api/v1/urls/:id
-	// PATCH  /api/v1/urls/:id
-	// DELETE /api/v1/urls/:id
-	//
-	// Requires authentication.
-	// The handlers additionally verify URL ownership.
+	// GET /api/v1/urls/:id/analytics
 	mux.Handle(
 		"/api/v1/urls/",
 		authMiddleware.RequireAuth(
 			http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if strings.HasSuffix(r.URL.Path, "/analytics") {
+					urlHandler.GetAnalytics(w, r)
+					return
+				}
+
 				switch r.Method {
 				case http.MethodGet:
 					urlHandler.GetURL(w, r)
@@ -221,15 +222,18 @@ func main() {
 					urlHandler.DeleteURL(w, r)
 
 				default:
-					http.Error(
-						w,
-						"Method Not Allowed",
-						http.StatusMethodNotAllowed,
-					)
+					http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
 				}
 			}),
 		),
 	)
+
+	// GET    /api/v1/urls/:id
+	// PATCH  /api/v1/urls/:id
+	// DELETE /api/v1/urls/:id
+	//
+	// Requires authentication.
+	// The handlers additionally verify URL ownership.
 
 	// ------------------------------------------------------------
 	// Public redirect endpoint

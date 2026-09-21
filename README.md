@@ -440,6 +440,15 @@ Response:
 `Idempotency-Key` is optional. When supplied, repeating the request for the same authenticated user returns the stored response instead of creating another URL.
 The `alias` field is optional. Aliases must be 3-32 characters and contain only letters, numbers, hyphens, or underscores. An alias can only be used once.
 
+#### URL analytics
+
+```http
+GET /api/v1/urls/{id}/analytics
+Authorization: Bearer <access-token>
+```
+
+The analytics response includes total clicks, device breakdown, referrer breakdown, and daily click counts. The authenticated user must own the URL.
+
 #### Get a URL
 
 ```http

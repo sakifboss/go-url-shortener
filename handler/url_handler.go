@@ -63,6 +63,7 @@ type URLService interface {
 type URLHandler struct {
 	service         URLService
 	clickWorker     *worker.ClickWorkerPool
+	clickRepository repository.ClickAnalyticsRepository
 	idempotencyRepo repository.IdempotencyRepository
 }
 
@@ -110,12 +111,73 @@ func NewURLHandler(
 	service URLService,
 	clickWorker *worker.ClickWorkerPool,
 	idempotencyRepo repository.IdempotencyRepository,
+	clickRepositories ...repository.ClickAnalyticsRepository,
 ) *URLHandler {
+	var clickRepository repository.ClickAnalyticsRepository
+	if len(clickRepositories) > 0 {
+		clickRepository = clickRepositories[0]
+	}
+
 	return &URLHandler{
 		service:         service,
 		clickWorker:     clickWorker,
+		clickRepository: clickRepository,
 		idempotencyRepo: idempotencyRepo,
 	}
+}
+
+// GetAnalytics handles GET /api/v1/urls/:id/analytics.
+func (h *URLHandler) GetAnalytics(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	if h.clickRepository == nil {
+		http.Error(w, "Analytics service unavailable", http.StatusInternalServerError)
+		return
+	}
+
+	id, err := parseAnalyticsURLID(r.URL.Path)
+	if err != nil {
+		http.Error(w, "Invalid URL ID", http.StatusBadRequest)
+		return
+	}
+
+	storedURL, err := h.service.GetURLByID(r.Context(), id)
+	if err != nil {
+		if repository.IsNotFound(err) {
+			http.NotFound(w, r)
+			return
+		}
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+
+	if !requireURLOwnership(w, r, storedURL) {
+		return
+	}
+
+	analytics, err := h.clickRepository.GetAnalytics(r.Context(), id)
+	if err != nil {
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+
+	if analytics.ByDevice == nil {
+		analytics.ByDevice = []model.AnalyticsCount{}
+	}
+	if analytics.ByReferrer == nil {
+		analytics.ByReferrer = []model.AnalyticsCount{}
+	}
+	if analytics.DailyClicks == nil {
+		analytics.DailyClicks = []model.DailyClickCount{}
+	}
+
+	writeJSON(w, http.StatusOK, analytics)
 }
 
 func writeStoredIdempotencyResponse(
@@ -722,6 +784,15 @@ func parseURLID(path string) (int64, error) {
 	}
 
 	return id, nil
+}
+
+func parseAnalyticsURLID(path string) (int64, error) {
+	const suffix = "/analytics"
+	if !strings.HasSuffix(path, suffix) {
+		return 0, strconv.ErrSyntax
+	}
+
+	return parseURLID(strings.TrimSuffix(path, suffix))
 }
 
 // writeJSON writes a JSON response with the requested HTTP status.
