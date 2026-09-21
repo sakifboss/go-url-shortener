@@ -20,6 +20,12 @@ The current implementation is functional and focused on the core URL-shortening 
 
 Live deployment: https://go-url-shortener-yi2j.onrender.com
 
+Analytics dashboard: https://go-url-shortener-yi2j.onrender.com/dashboard/
+
+The dashboard is served by the Go application itself. Sign in with an existing
+user, enter the numeric URL ID, and load analytics. The access token is kept in
+browser session storage and is cleared when you sign out or close the session.
+
 ## Architecture
 
 GoShort uses a layered architecture with explicit boundaries between transport, business logic, persistence, infrastructure, and background processing.

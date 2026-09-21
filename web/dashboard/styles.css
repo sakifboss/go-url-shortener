@@ -1,0 +1,355 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;600;700;800&display=swap');
+
+:root {
+    --ink: #1f2925;
+    --muted: #6f7771;
+    --paper: #f5f5ef;
+    --panel: #fffef9;
+    --line: #dfe3d9;
+    --lime: #c8ef75;
+    --coral: #ee795d;
+    --teal: #1f7a70;
+    --shadow: 0 18px 45px rgba(50, 61, 45, .08);
+}
+
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    color: var(--ink);
+    background: radial-gradient(circle at 100% 0%, #e4f2bd 0, transparent 28rem), var(--paper);
+    font-family: Manrope, sans-serif;
+}
+
+.shell {
+    width: min(1180px, calc(100% - 40px));
+    margin: 0 auto;
+    padding: 54px 0 80px;
+}
+
+.masthead {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 32px;
+    margin-bottom: 38px;
+}
+
+.eyebrow {
+    margin: 0 0 10px;
+    color: var(--teal);
+    font: 500 11px 'DM Mono', monospace;
+    letter-spacing: 1.4px;
+    text-transform: uppercase;
+}
+
+h1 {
+    max-width: 680px;
+    margin: 0;
+    font-size: clamp(2.5rem, 6vw, 5.5rem);
+    line-height: .95;
+    letter-spacing: -3px;
+}
+
+.lede {
+    margin: 20px 0 0;
+    color: var(--muted);
+    font-size: 16px;
+}
+
+.status-pill {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding: 10px 14px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: rgba(255, 254, 249, .72);
+    font: 500 12px 'DM Mono', monospace;
+    white-space: nowrap;
+}
+
+.status-pill span {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--teal);
+    box-shadow: 0 0 0 4px #d6f3b0;
+}
+
+.control-panel,
+.panel,
+.metric-card {
+    border: 1px solid var(--line);
+    background: rgba(255, 254, 249, .86);
+    box-shadow: var(--shadow);
+}
+
+.control-panel {
+    padding: 20px;
+    margin-bottom: 24px;
+    border-radius: 8px;
+}
+
+.login-grid,
+.analytics-controls {
+    display: grid;
+    grid-template-columns: 1fr 1fr auto;
+    align-items: end;
+    gap: 14px;
+}
+
+.analytics-controls {
+    grid-template-columns: 220px auto 1fr;
+}
+
+label {
+    display: grid;
+    gap: 8px;
+    color: var(--muted);
+    font: 500 11px 'DM Mono', monospace;
+    text-transform: uppercase;
+}
+
+input {
+    width: 100%;
+    padding: 13px 14px;
+    border: 1px solid var(--line);
+    border-radius: 5px;
+    background: #fff;
+    color: var(--ink);
+    font: 15px Manrope, sans-serif;
+    outline: none;
+}
+
+input:focus {
+    border-color: var(--teal);
+    box-shadow: 0 0 0 3px #d6f3b0;
+}
+
+button {
+    min-height: 45px;
+    padding: 0 20px;
+    border: 0;
+    border-radius: 5px;
+    background: var(--ink);
+    color: #fff;
+    font: 700 13px Manrope, sans-serif;
+    cursor: pointer;
+}
+
+button:hover {
+    background: var(--teal);
+}
+
+.quiet-button {
+    justify-self: end;
+    background: transparent;
+    color: var(--muted);
+    border: 1px solid var(--line);
+}
+
+.message {
+    min-height: 18px;
+    margin: 12px 0 0;
+    color: var(--coral);
+    font-size: 13px;
+}
+
+.dashboard {
+    animation: rise .5s ease-out both;
+}
+
+.summary-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+    margin-bottom: 16px;
+}
+
+.metric-card {
+    min-height: 150px;
+    padding: 22px;
+    border-radius: 8px;
+}
+
+.metric-card span,
+.metric-card small {
+    display: block;
+    color: var(--muted);
+    font-size: 12px;
+}
+
+.metric-card strong {
+    display: block;
+    margin: 18px 0 8px;
+    font-size: 34px;
+    letter-spacing: -1px;
+}
+
+.accent-card {
+    background: var(--lime);
+    border-color: #b5df67;
+}
+
+.chart-grid {
+    display: grid;
+    grid-template-columns: 1.4fr .8fr;
+    gap: 16px;
+}
+
+.panel {
+    min-height: 260px;
+    padding: 22px;
+    border-radius: 8px;
+}
+
+.wide-panel {
+    grid-row: span 2;
+}
+
+.panel-heading {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 26px;
+}
+
+h2 {
+    margin: 0;
+    font-size: 20px;
+    letter-spacing: -.5px;
+}
+
+.panel-note {
+    color: var(--muted);
+    font: 11px 'DM Mono', monospace;
+}
+
+.bar-chart {
+    display: flex;
+    align-items: flex-end;
+    gap: 10px;
+    height: 190px;
+    padding-top: 12px;
+    border-bottom: 1px solid var(--line);
+}
+
+.bar-item {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    height: 100%;
+    min-width: 26px;
+}
+
+.bar {
+    width: min(34px, 80%);
+    min-height: 5px;
+    border-radius: 4px 4px 0 0;
+    background: var(--coral);
+    transition: height .35s ease;
+}
+
+.bar-label {
+    color: var(--muted);
+    font: 10px 'DM Mono', monospace;
+    writing-mode: vertical-rl;
+    transform: rotate(180deg);
+}
+
+.rank-list {
+    display: grid;
+    gap: 13px;
+}
+
+.rank-row {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 14px;
+    align-items: center;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--line);
+    font-size: 13px;
+}
+
+.rank-row strong {
+    font: 500 12px 'DM Mono', monospace;
+}
+
+.rank-track {
+    grid-column: 1 / -1;
+    height: 5px;
+    border-radius: 5px;
+    background: #e7e9df;
+    overflow: hidden;
+}
+
+.rank-track span {
+    display: block;
+    height: 100%;
+    background: var(--teal);
+}
+
+.empty-state {
+    color: var(--muted);
+    font-size: 13px;
+}
+
+.is-hidden {
+    display: none !important;
+}
+
+@keyframes rise {
+    from {
+        opacity: 0;
+        transform: translateY(8px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@media (max-width:760px) {
+    .shell {
+        width: min(100% - 24px, 580px);
+        padding-top: 30px;
+    }
+
+    .masthead {
+        display: block;
+    }
+
+    .status-pill {
+        display: inline-flex;
+        margin-top: 22px;
+    }
+
+    h1 {
+        font-size: 3.2rem;
+        letter-spacing: -2px;
+    }
+
+    .login-grid,
+    .analytics-controls,
+    .summary-grid,
+    .chart-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .wide-panel {
+        grid-row: auto;
+    }
+
+    .quiet-button {
+        justify-self: start;
+    }
+}

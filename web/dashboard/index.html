@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>GoShort Analytics</title>
+    <link rel="stylesheet" href="/dashboard/styles.css">
+</head>
+
+<body>
+    <main class="shell">
+        <section class="masthead">
+            <div>
+                <p class="eyebrow">GoShort / signal room</p>
+                <h1>Know where your links travel.</h1>
+                <p class="lede">A quiet view of clicks, devices, referrals, and momentum.</p>
+            </div>
+            <div class="status-pill"><span></span> API connected</div>
+        </section>
+
+        <section class="control-panel" aria-label="Dashboard controls">
+            <form id="login-form" class="login-grid">
+                <label>Email<input id="email" type="email" autocomplete="username" required
+                        placeholder="you@example.com"></label>
+                <label>Password<input id="password" type="password" autocomplete="current-password" required
+                        placeholder="Your password"></label>
+                <button type="submit">Sign in</button>
+            </form>
+            <div class="analytics-controls is-hidden" id="analytics-controls">
+                <label>URL ID<input id="url-id" type="number" min="1" placeholder="e.g. 7" required></label>
+                <button id="load-analytics" type="button">Load analytics</button>
+                <button id="sign-out" class="quiet-button" type="button">Sign out</button>
+            </div>
+            <p id="message" class="message" role="status"></p>
+        </section>
+
+        <section id="dashboard" class="dashboard is-hidden" aria-live="polite">
+            <div class="summary-grid">
+                <article class="metric-card accent-card"><span>Total clicks</span><strong
+                        id="total-clicks">0</strong><small>All recorded visits</small></article>
+                <article class="metric-card"><span>Top device</span><strong id="top-device">-</strong><small
+                        id="top-device-count">No visits yet</small></article>
+                <article class="metric-card"><span>Top referrer</span><strong id="top-referrer">-</strong><small
+                        id="top-referrer-count">No visits yet</small></article>
+            </div>
+            <div class="chart-grid">
+                <article class="panel wide-panel">
+                    <div class="panel-heading">
+                        <div>
+                            <p class="eyebrow">Timeline</p>
+                            <h2>Daily clicks</h2>
+                        </div><span id="date-range" class="panel-note"></span>
+                    </div>
+                    <div id="daily-chart" class="bar-chart">
+                        <p class="empty-state">Load a URL to see activity.</p>
+                    </div>
+                </article>
+                <article class="panel">
+                    <div class="panel-heading">
+                        <div>
+                            <p class="eyebrow">Audience</p>
+                            <h2>Devices</h2>
+                        </div>
+                    </div>
+                    <div id="device-list" class="rank-list">
+                        <p class="empty-state">No data yet.</p>
+                    </div>
+                </article>
+                <article class="panel">
+                    <div class="panel-heading">
+                        <div>
+                            <p class="eyebrow">Discovery</p>
+                            <h2>Referrers</h2>
+                        </div>
+                    </div>
+                    <div id="referrer-list" class="rank-list">
+                        <p class="empty-state">No data yet.</p>
+                    </div>
+                </article>
+            </div>
+        </section>
+    </main>
+    <script src="/dashboard/app.js"></script>
+</body>
+
+</html>

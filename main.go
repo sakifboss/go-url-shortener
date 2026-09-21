@@ -19,6 +19,8 @@ import (
 	"goshort/repository"
 	"goshort/security"
 	"goshort/service"
+	"goshort/web"
+	"io/fs"
 )
 
 func main() {
@@ -151,6 +153,19 @@ func main() {
 
 	// GET /health
 	mux.HandleFunc("/health", healthHandler)
+
+	dashboardFS, err := fs.Sub(web.Dashboard, "dashboard")
+	if err != nil {
+		fmt.Println("Dashboard setup error:", err)
+		return
+	}
+	mux.Handle(
+		"/dashboard/",
+		http.StripPrefix(
+			"/dashboard/",
+			http.FileServer(http.FS(dashboardFS)),
+		),
+	)
 
 	// GET /hello
 	mux.HandleFunc("/hello", helloHandler)
