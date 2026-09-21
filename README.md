@@ -16,7 +16,9 @@ GoShort demonstrates practical backend engineering patterns in a small, focused 
 
 ## Status
 
-The current implementation is functional and focused on the core URL-shortening workflow. Analytics queries, observability, load testing, Docker Compose, and CI/CD remain future work.
+The current implementation is functional and focused on the core URL-shortening workflow. Analytics queries, observability, and load testing remain future work.
+
+Live deployment: https://go-url-shortener-yi2j.onrender.com
 
 ## Architecture
 
