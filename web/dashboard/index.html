@@ -32,6 +32,16 @@
                 <button id="load-analytics" type="button">Load analytics</button>
                 <button id="sign-out" class="quiet-button" type="button">Sign out</button>
             </div>
+            <form id="create-url-form" class="create-url-form is-hidden">
+                <label>Long URL<input id="long-url" type="url" required placeholder="https://example.com/article"></label>
+                <label>Custom alias <span class="optional">optional</span><input id="custom-alias" type="text" minlength="3" maxlength="32" pattern="[A-Za-z0-9_-]+" placeholder="my-link"></label>
+                <button type="submit">Shorten URL</button>
+            </form>
+            <div id="created-link" class="created-link is-hidden">
+                <span>Short link ready</span>
+                <a id="created-link-url" target="_blank" rel="noopener noreferrer"></a>
+                <button id="copy-link" type="button" class="quiet-button">Copy link</button>
+            </div>
             <p id="message" class="message" role="status"></p>
         </section>
 

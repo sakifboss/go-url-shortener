@@ -105,6 +105,54 @@ h1 {
     grid-template-columns: 220px auto 1fr;
 }
 
+.create-url-form {
+    display: grid;
+    grid-template-columns: 1.5fr 1fr auto;
+    align-items: end;
+    gap: 14px;
+    margin-top: 16px;
+    padding-top: 16px;
+    border-top: 1px solid var(--line);
+}
+
+.optional {
+    color: var(--muted);
+    font-size: 10px;
+    text-transform: none;
+}
+
+.created-link {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-top: 16px;
+    padding: 14px;
+    border: 1px solid #b5df67;
+    border-radius: 5px;
+    background: #effbd5;
+    font-size: 13px;
+}
+
+.created-link span {
+    color: var(--muted);
+    font: 500 11px 'DM Mono', monospace;
+    text-transform: uppercase;
+}
+
+.created-link a {
+    min-width: 0;
+    overflow: hidden;
+    color: var(--teal);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.created-link .quiet-button {
+    min-height: 36px;
+    padding: 0 12px;
+    margin-left: auto;
+}
+
 label {
     display: grid;
     gap: 8px;
@@ -340,6 +388,7 @@ h2 {
 
     .login-grid,
     .analytics-controls,
+    .create-url-form,
     .summary-grid,
     .chart-grid {
         grid-template-columns: 1fr;
@@ -351,5 +400,14 @@ h2 {
 
     .quiet-button {
         justify-self: start;
+    }
+
+    .created-link {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .created-link .quiet-button {
+        margin-left: 0;
     }
 }
