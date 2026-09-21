@@ -455,6 +455,16 @@ Authorization: Bearer <access-token>
 
 The analytics response includes total clicks, device breakdown, referrer breakdown, and daily click counts. The authenticated user must own the URL.
 
+#### My links
+
+```http
+GET /api/v1/urls
+Authorization: Bearer <access-token>
+```
+
+Returns the authenticated user's URLs. The dashboard uses this endpoint to show
+links with copy, analytics, and delete actions.
+
 #### Get a URL
 
 ```http

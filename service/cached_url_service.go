@@ -62,6 +62,14 @@ func (s *CachedURLService) GetURLByID(
 	return s.repository.FindByID(ctx, id)
 }
 
+func (s *CachedURLService) ListURLs(
+	ctx context.Context,
+	userID int64,
+) ([]model.URL, error) {
+	baseService := NewURLService(s.repository)
+	return baseService.ListURLs(ctx, userID)
+}
+
 func (s *CachedURLService) GetOriginalURL(
 	ctx context.Context,
 	shortCode string,

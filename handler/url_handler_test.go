@@ -57,6 +57,13 @@ func (s *testURLService) GetURLByID(
 	return model.URL{ID: 1, UserID: &userID}, nil
 }
 
+func (s *testURLService) ListURLs(
+	_ context.Context,
+	_ int64,
+) ([]model.URL, error) {
+	return []model.URL{}, nil
+}
+
 type testAnalyticsRepository struct{}
 
 func (testAnalyticsRepository) GetAnalytics(
@@ -285,6 +292,19 @@ func TestGetAnalyticsRequiresOwnershipAndReturnsAggregates(t *testing.T) {
 	}
 	if analytics.TotalClicks != 3 {
 		t.Fatalf("total clicks = %d, want 3", analytics.TotalClicks)
+	}
+}
+
+func TestListURLsRequiresAuthentication(t *testing.T) {
+	service := &testURLService{}
+	handler := NewURLHandler(service, nil, nil)
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/urls", nil)
+	response := httptest.NewRecorder()
+
+	handler.ListURLs(response, request)
+
+	if response.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want %d", response.Code, http.StatusUnauthorized)
 	}
 }
 

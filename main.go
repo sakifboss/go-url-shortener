@@ -212,7 +212,13 @@ func main() {
 	mux.Handle(
 		"/api/v1/urls",
 		authMiddleware.RequireAuth(
-			http.HandlerFunc(urlHandler.CreateURL),
+			http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.Method == http.MethodGet {
+					urlHandler.ListURLs(w, r)
+					return
+				}
+				urlHandler.CreateURL(w, r)
+			}),
 		),
 	)
 

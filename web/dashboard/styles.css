@@ -153,6 +153,64 @@ h1 {
     margin-left: auto;
 }
 
+.links-panel {
+    margin-bottom: 16px;
+}
+
+.links-list {
+    display: grid;
+    gap: 10px;
+}
+
+.link-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 14px;
+    align-items: center;
+    padding: 14px 0;
+    border-top: 1px solid var(--line);
+}
+
+.link-row-main {
+    min-width: 0;
+}
+
+.link-row-main a {
+    color: var(--teal);
+    font: 500 13px 'DM Mono', monospace;
+}
+
+.link-row-main p {
+    overflow: hidden;
+    margin: 7px 0 0;
+    color: var(--muted);
+    font-size: 12px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.link-row-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.link-row-actions button {
+    min-height: 34px;
+    padding: 0 11px;
+    font-size: 12px;
+}
+
+.danger-button {
+    background: transparent;
+    color: var(--coral);
+    border: 1px solid #efc0b4;
+}
+
+.danger-button:hover {
+    background: #fff0eb;
+    color: var(--coral);
+}
+
 label {
     display: grid;
     gap: 8px;
@@ -409,5 +467,13 @@ h2 {
 
     .created-link .quiet-button {
         margin-left: 0;
+    }
+
+    .link-row {
+        grid-template-columns: 1fr;
+    }
+
+    .link-row-actions {
+        justify-content: flex-start;
     }
 }

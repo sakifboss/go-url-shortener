@@ -13,6 +13,7 @@ function setSignedIn(signedIn) {
     $('#analytics-controls').classList.toggle('is-hidden', !signedIn);
     $('#create-url-form').classList.toggle('is-hidden', !signedIn);
     $('#dashboard').classList.toggle('is-hidden', !signedIn);
+    $('#links-panel').classList.toggle('is-hidden', !signedIn);
 }
 
 function renderRankList(target, items, emptyLabel) {
@@ -87,7 +88,94 @@ async function signIn(event) {
         state.token = data.access_token;
         sessionStorage.setItem('goshort_access_token', state.token);
         setSignedIn(true);
+        await loadLinks();
         setMessage('Signed in. Enter a URL ID to load analytics.', false);
+    } catch (error) {
+        setMessage(error.message);
+    }
+}
+
+function shortURLFor(item) {
+    return `${window.location.origin}/${item.short_code}`;
+}
+
+function renderLinks(items) {
+    const list = $('#links-list');
+    list.textContent = '';
+    if (!items.length) {
+        list.innerHTML = '<p class="empty-state">No links yet. Create your first short link above.</p>';
+        return;
+    }
+
+    items.forEach((item) => {
+        const row = document.createElement('div');
+        row.className = 'link-row';
+
+        const main = document.createElement('div');
+        main.className = 'link-row-main';
+        const link = document.createElement('a');
+        link.href = shortURLFor(item);
+        link.target = '_blank';
+        link.rel = 'noopener noreferrer';
+        link.textContent = link.href;
+        const destination = document.createElement('p');
+        destination.textContent = item.original_url;
+        main.append(link, destination);
+
+        const actions = document.createElement('div');
+        actions.className = 'link-row-actions';
+        const analyticsButton = document.createElement('button');
+        analyticsButton.type = 'button';
+        analyticsButton.textContent = 'Analytics';
+        analyticsButton.addEventListener('click', () => {
+            $('#url-id').value = item.id;
+            loadAnalytics();
+            window.scrollTo({ top: $('#dashboard').offsetTop, behavior: 'smooth' });
+        });
+        const copyButton = document.createElement('button');
+        copyButton.type = 'button';
+        copyButton.className = 'quiet-button';
+        copyButton.textContent = 'Copy';
+        copyButton.addEventListener('click', async () => {
+            await navigator.clipboard.writeText(link.href);
+            setMessage('Short link copied.', false);
+        });
+        const deleteButton = document.createElement('button');
+        deleteButton.type = 'button';
+        deleteButton.className = 'danger-button';
+        deleteButton.textContent = 'Delete';
+        deleteButton.addEventListener('click', () => deleteLink(item.id));
+        actions.append(analyticsButton, copyButton, deleteButton);
+        row.append(main, actions);
+        list.appendChild(row);
+    });
+}
+
+async function loadLinks() {
+    try {
+        const data = await requestJSON('/api/v1/urls', {
+            headers: { Authorization: `Bearer ${state.token}` },
+        });
+        renderLinks(data);
+    } catch (error) {
+        setMessage(error.message);
+    }
+}
+
+async function deleteLink(id) {
+    if (!window.confirm(`Delete URL #${id}?`)) {
+        return;
+    }
+    try {
+        const response = await fetch(`/api/v1/urls/${id}`, {
+            method: 'DELETE',
+            headers: { Authorization: `Bearer ${state.token}` },
+        });
+        if (!response.ok) {
+            throw new Error((await response.text()) || `Delete failed (${response.status})`);
+        }
+        await loadLinks();
+        setMessage(`URL #${id} deleted.`, false);
     } catch (error) {
         setMessage(error.message);
     }
@@ -135,6 +223,7 @@ async function createShortURL(event) {
         $('#created-link-url').textContent = data.short_url;
         $('#created-link').classList.remove('is-hidden');
         $('#url-id').value = data.id;
+        await loadLinks();
         setMessage('Short link created. You can load its analytics below.', false);
     } catch (error) {
         setMessage(error.message);
@@ -167,4 +256,8 @@ $('#create-url-form').addEventListener('submit', createShortURL);
 $('#load-analytics').addEventListener('click', loadAnalytics);
 $('#sign-out').addEventListener('click', signOut);
 $('#copy-link').addEventListener('click', copyLink);
+$('#refresh-links').addEventListener('click', loadLinks);
 setSignedIn(Boolean(state.token));
+if (state.token) {
+    loadLinks();
+}

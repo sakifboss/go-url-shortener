@@ -148,6 +148,17 @@ func (s *URLService) GetURLByID(
 	)
 }
 
+func (s *URLService) ListURLs(
+	ctx context.Context,
+	userID int64,
+) ([]model.URL, error) {
+	if userID <= 0 {
+		return nil, fmt.Errorf("invalid user ID")
+	}
+
+	return s.repository.FindByUserID(ctx, userID)
+}
+
 // GetOriginalURL returns the destination URL for a short code.
 func (s *URLService) GetOriginalURL(
 	ctx context.Context,

@@ -12,10 +12,61 @@ import (
 // by the URL service.
 type URLRepository interface {
 	Create(ctx context.Context, url model.URL) (model.URL, error)
+	FindByUserID(ctx context.Context, userID int64) ([]model.URL, error)
 	FindByID(ctx context.Context, id int64) (model.URL, error)
 	FindByShortCode(ctx context.Context, shortCode string) (model.URL, error)
 	Update(ctx context.Context, url model.URL) (model.URL, error)
 	Delete(ctx context.Context, id int64) error
+}
+
+func (r *PostgresURLRepository) FindByUserID(
+	ctx context.Context,
+	userID int64,
+) ([]model.URL, error) {
+	const query = `
+		SELECT
+			id,
+			short_code,
+			custom_alias,
+			original_url,
+			user_id,
+			created_at,
+			expires_at,
+			is_active
+		FROM urls
+		WHERE user_id = $1
+		ORDER BY created_at DESC, id DESC
+	`
+
+	rows, err := r.db.QueryContext(ctx, query, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	urls := make([]model.URL, 0)
+	for rows.Next() {
+		var url model.URL
+		if err := rows.Scan(
+			&url.ID,
+			&url.ShortCode,
+			&url.CustomAlias,
+			&url.OriginalURL,
+			&url.UserID,
+			&url.CreatedAt,
+			&url.ExpiresAt,
+			&url.IsActive,
+		); err != nil {
+			return nil, err
+		}
+		urls = append(urls, url)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return urls, nil
 }
 
 // PostgresURLRepository implements URLRepository using PostgreSQL.

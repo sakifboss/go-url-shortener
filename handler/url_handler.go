@@ -43,6 +43,11 @@ type URLService interface {
 		id int64,
 	) (model.URL, error)
 
+	ListURLs(
+		ctx context.Context,
+		userID int64,
+	) ([]model.URL, error)
+
 	GetOriginalURL(
 		ctx context.Context,
 		shortCode string,
@@ -57,6 +62,34 @@ type URLService interface {
 		ctx context.Context,
 		id int64,
 	) error
+}
+
+func (h *URLHandler) ListURLs(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	user, ok := auth.CurrentUser(r.Context())
+	if !ok {
+		http.Error(w, "Authentication required", http.StatusUnauthorized)
+		return
+	}
+
+	urls, err := h.service.ListURLs(r.Context(), user.UserID)
+	if err != nil {
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+
+	if urls == nil {
+		urls = []model.URL{}
+	}
+
+	writeJSON(w, http.StatusOK, urls)
 }
 
 // URLHandler handles HTTP requests related to URL operations.
